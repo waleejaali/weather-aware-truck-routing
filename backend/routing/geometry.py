@@ -60,6 +60,27 @@ def _locate(points: Sequence[Coordinate], cumulative: Sequence[float], distance_
     return points[-1]
 
 
+def points_at_distances(points: Sequence[Coordinate], distances_m: Sequence[float]) -> list[Coordinate]:
+    """Points at the given distances along the path, in one pass.
+
+    distances_m must be ascending; values outside the path are clamped to its ends.
+    """
+    if any(b < a for a, b in zip(distances_m, distances_m[1:])):
+        raise ValueError("distances_m must be ascending")
+    cumulative = _cumulative_m(points)
+    result = []
+    index = 1
+    for distance in distances_m:
+        distance = max(0.0, min(distance, cumulative[-1]))
+        while index < len(points) - 1 and cumulative[index] < distance:
+            index += 1
+        segment = cumulative[index] - cumulative[index - 1]
+        t = 0.0 if segment == 0 else max(0.0, min(1.0, (distance - cumulative[index - 1]) / segment))
+        a, b = points[index - 1], points[index]
+        result.append(Coordinate(a.lat + (b.lat - a.lat) * t, a.lon + (b.lon - a.lon) * t))
+    return result
+
+
 def point_and_bearing_at_fraction(points: Sequence[Coordinate], fraction: float) -> tuple[Coordinate, float]:
     """Point at a fraction of the path length, and the local travel bearing there."""
     cumulative = _cumulative_m(points)

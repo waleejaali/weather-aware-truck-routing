@@ -39,6 +39,21 @@ function App() {
           <span className="text-red-700">Backend unreachable: {backend.message}</span>
         )}
       </div>
+      <footer className="text-sm text-slate-500">
+        <a className="underline" href="https://open-meteo.com/" target="_blank" rel="noreferrer">
+          Weather data by Open-Meteo.com
+        </a>{' '}
+        (
+        <a
+          className="underline"
+          href="https://creativecommons.org/licenses/by/4.0/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          CC BY 4.0
+        </a>
+        )
+      </footer>
     </main>
   )
 }

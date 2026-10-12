@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "routing",
     "weather",
     "risk",
+    "trips",
 ]
 
 MIDDLEWARE = [
@@ -68,6 +69,9 @@ ORS_BASE_URL = os.environ.get("ORS_BASE_URL", "https://api.openrouteservice.org"
 ORS_PROFILE = os.environ.get("ORS_PROFILE", "driving-hgv")
 ORS_TIMEOUT_SECONDS = float(os.environ.get("ORS_TIMEOUT_SECONDS", "30"))
 OPEN_METEO_BASE_URL = os.environ.get("OPEN_METEO_BASE_URL", "https://api.open-meteo.com")
+WEATHER_TIMEOUT_SECONDS = float(os.environ.get("WEATHER_TIMEOUT_SECONDS", "20"))
+# Which wind value drives risk: "sustained" (wind_speed_10m) or "gust" (wind_gusts_10m).
+WEATHER_WIND_METRIC = os.environ.get("WEATHER_WIND_METRIC", "sustained")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
