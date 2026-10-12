@@ -218,3 +218,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Project additions ---
+# Allow the committed template while ignoring real env files
+.env.*
+!.env.example
+
+# Node / Vite
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Local databases
+*.sqlite3
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
