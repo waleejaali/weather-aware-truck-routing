@@ -252,6 +252,8 @@ def _assumptions(interval_miles: float, wind_metric: str, min_coverage: float) -
         else "10 m wind gusts (wind_gusts_10m, max of the preceding hour); sustained speed is not used"
     )
     return (
+        "This is a recommendation based on forecast conditions at sampled checkpoints, "
+        "not a guarantee that any route is safe.",
         f"Weather is sampled at checkpoints about every {interval_miles:g} miles, not along every mile; "
         "hazards between checkpoints can be missed.",
         "Miles at each risk level are estimates: each checkpoint's level is applied to the road halfway "

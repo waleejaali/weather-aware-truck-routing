@@ -42,6 +42,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # Route geometries are large JSON; gzip cuts them roughly 5-10x.
+    "django.middleware.gzip.GZipMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
 
@@ -60,6 +62,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [],
     "UNAUTHENTICATED_USER": None,
+    "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
 }
 
 # External API configuration, consumed by the provider adapters.

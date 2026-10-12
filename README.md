@@ -2,7 +2,7 @@
 
 Compare three driving routes for a truck based on weather along the route, load weight, estimated checkpoint arrival times, and travel duration.
 
-> **Status:** backend routing, weather, risk and recommendation logic with tests and live-check commands. No HTTP API endpoint for them and no map UI yet.
+> **Status:** backend routing, weather, risk and recommendation logic with a REST API (`POST /api/v1/routes/assess/`), tests and live-check commands. No map UI yet.
 
 ## Stack
 
@@ -22,7 +22,7 @@ backend/
                geometry.py + validation.py = pure logic, management/commands/ = live check)
   weather/     Weather retrieval (providers/ = Open-Meteo adapter)
   risk/        Pure risk thresholds, load rules, aggregation and ranking (no Django/network imports)
-  trips/       Orchestration: checkpoints -> ETAs -> weather -> risk -> ranking (assessment.py)
+  trips/       Orchestration (assessment.py, services.py) and the REST endpoint (serializers.py, views.py, presenters.py)
 frontend/      React + TypeScript + Vite app
 .env.example   Environment variable template
 ```
@@ -219,6 +219,8 @@ Load rules (strict `>`): wind 45-<55 mph with load > 30,000 lb is No Travel; win
 - **Status** (`TripAssessment.status`): `recommended`; `recommended_incomplete_weather` (the winner has some gaps, risk may be understated);
   `no_safe_route` (every route has a No Travel checkpoint); `insufficient_weather_data` (no route has enough weather to compare or
   recommend; nothing should be treated as safe). In the last two, `recommended` is `None`.
+- **Wording:** results are a recommendation from forecast conditions at sampled checkpoints, not a guarantee of safety. Any UI must show the
+  weather coverage, sampling interval, wind metric and the estimated-miles method next to the recommendation (all are in the result; see `assumptions`).
 - **Wind metric:** exactly one of sustained wind or gusts feeds the rules, never a mix. It is in `TripAssessment.wind_metric`, in the
   `assumptions` text, and per checkpoint as `wind_mph_used`. Sustained is the default because the assignment says "wind" without defining it.
 
@@ -234,3 +236,132 @@ python manage.py check
 python manage.py test                      # offline: mocked HTTP, no keys
 python manage.py check_weather --departure 2026-10-14T08:00:00-05:00 --load-lb 42000 --checkpoints   # live ORS + Open-Meteo
 ```
+
+## REST API
+
+Base URL in development: `http://localhost:8000`. JSON in, JSON out. No authentication. CORS allows the origins in `FRONTEND_URL`.
+
+### `POST /api/v1/routes/assess/`
+
+Plans up to three truck routes (OpenRouteService, `driving-hgv`), samples weather at each checkpoint's estimated arrival time
+(Open-Meteo), classifies risk with the load rules, ranks the routes and says whether any can be recommended. It runs the same
+pipeline as `python manage.py check_weather` (`trips/services.py`). It makes live provider calls, so it needs `ORS_API_KEY` and
+takes a few seconds for long trips. Responses are gzip-compressed when the client sends `Accept-Encoding: gzip`.
+
+**Request**
+
+```json
+{
+  "origin": {"latitude": 34.0522, "longitude": -118.2437},
+  "destination": {"latitude": 32.7767, "longitude": -96.7970},
+  "departure_datetime": "2026-10-14T08:00:00-05:00",
+  "load_lb": 42000,
+  "checkpoint_interval_miles": 25
+}
+```
+
+| Field | Rules |
+| --- | --- |
+| `origin`, `destination` | objects with numeric `latitude` (-90..90) and `longitude` (-180..180); at least 100 m apart |
+| `departure_datetime` | ISO 8601 **with a UTC offset** (`-05:00` or `Z`). Times without an offset are rejected, never assumed to be UTC. Converted to UTC internally |
+| `load_lb` | number, greater than 0 and at most 150,000 |
+| `checkpoint_interval_miles` | exactly 10, 25 or 50 |
+
+Numbers must be JSON numbers (strings, booleans, NaN and infinity are rejected). Unknown fields are ignored.
+Geocoding is not part of this API: send coordinates.
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/routes/assess/ \
+  -H "Content-Type: application/json" \
+  -d '{"origin":{"latitude":34.0522,"longitude":-118.2437},"destination":{"latitude":32.7767,"longitude":-96.7970},"departure_datetime":"2026-10-14T08:00:00-05:00","load_lb":42000,"checkpoint_interval_miles":25}'
+```
+
+Choose a departure within the weather forecast window (about 92 days back to 16 days ahead); checkpoints outside it are
+reported as unavailable.
+
+**Response (200)** - abridged
+
+```json
+{
+  "api_version": "v1",
+  "request": {"origin": {...}, "destination": {...}, "departure_datetime": "2026-10-14T13:00:00Z",
+              "departure_datetime_input": "2026-10-14T08:00:00-05:00", "load_lb": 42000.0, "checkpoint_interval_miles": 25},
+  "units": {"distance": "mi", "duration": "s", "wind_speed": "mph", "rain_rate": "in/hr", "snow_rate": "in/hr", "...": "..."},
+  "risk_levels": [{"key": "low", "label": "Low", "score": 0}, "... moderate, high, severe, no_travel"],
+  "recommendation": {
+    "status": "recommended",
+    "recommended_route_id": "route-1",
+    "explanation": "route-1 is recommended. Ranked first over route-2: fewer High miles (0 vs 25). This is based on forecast conditions at sampled checkpoints and is not a guarantee of safety."
+  },
+  "method": {
+    "wind_metric": "sustained", "checkpoint_interval_miles": 25, "min_weather_coverage_percent": 80,
+    "assumptions": ["..."],
+    "routing": {"provider": "openrouteservice", "profile": "driving-hgv", "status": "complete",
+                "requested_routes": 3, "returned_routes": 3, "notes": ["Provider alternatives skipped: ..."]},
+    "weather": {"provider": "open-meteo", "attribution": {"text": "Weather data by Open-Meteo.com", "url": "https://open-meteo.com/", "license": "CC BY 4.0", "license_url": "..."}},
+    "notes": ["..."]
+  },
+  "routes": [
+    {
+      "id": "route-1", "source": "baseline", "rank": 1, "recommended": true,
+      "eligible": true, "ineligible_reason": null,
+      "distance_miles": 1430.1, "duration_seconds": 119340, "duration_text": "33 h 9 min",
+      "departure_datetime": "2026-10-14T13:00:00Z", "arrival_datetime": "2026-10-15T22:09:00Z",
+      "geometry": {"type": "LineString", "coordinates": [[-118.2437, 34.0522], "... [longitude, latitude]"]},
+      "risk_summary": {
+        "miles": {"low": 1430.1, "moderate": 0.0, "high": 0.0, "severe": 0.0, "no_travel": 0.0, "unknown": 0.0},
+        "average_score": 0.0, "weather_coverage_percent": 100.0, "weather_data_complete": true,
+        "max_risk_level": "low", "no_travel_checkpoints": 0
+      },
+      "ranking": {"keys": {"no_travel_miles": 0.0, "weather_data_complete": true, "severe_miles": 0.0, "high_miles": 0.0,
+                           "average_score": 0.0, "duration_seconds": 119340},
+                  "explanation": "Ranked first over route-2: ..."},
+      "checkpoints": [
+        {"index": 1, "distance_miles": 25.0, "segment_miles": 25.0, "latitude": 34.07, "longitude": -117.8,
+         "eta": "2026-10-14T13:45:00Z",
+         "weather_status": "complete", "weather_missing_reason": null,
+         "weather": {"wind_speed_mph": 8.2, "wind_gust_mph": 11.6, "rain_in_per_hr": 0.0, "snow_in_per_hr": 0.0, "wind_used_mph": 8.2},
+         "risk": {"combined": "low", "wind": "low", "rain": "low", "snow": "low", "load_override": null, "reasons": ["wind 8.2 mph: Low", "..."]}}
+      ]
+    }
+  ]
+}
+```
+
+Notes on the contract:
+- `routes` is ordered by `rank` (1 = best) and always contains every candidate. `route-N` ids are stable within a response only.
+- **`recommendation.status`**: `recommended`; `recommended_incomplete_weather` (winner has some missing weather, risk may be understated);
+  `no_safe_route` (every route has a No Travel checkpoint); `insufficient_weather_data` (no route has enough weather data to compare).
+  In the last two, `recommended_route_id` is `null`. These are results (HTTP 200), not errors. Missing weather never means safe.
+- **Geometry** is a GeoJSON `LineString` with `[longitude, latitude]` pairs rounded to 5 decimals. Use `L.geoJSON(...)` in Leaflet,
+  or swap each pair for `L.polyline`.
+- **Weather values are `null` when unavailable**, never 0. `weather_status` is `complete`, `partial` (some fields missing; known hazards are
+  still classified) or `unavailable`, with `weather_missing_reason`.
+- `risk_summary.miles` are estimates: each checkpoint's risk is applied to the road halfway to its neighbours (see "Aggregation and recommendation").
+- Timestamps are ISO 8601 UTC ending in `Z`. Durations are seconds, distances miles, wind mph, rain and snow inches/hour.
+- `method.assumptions` and `method.routing.notes` (for example why provider alternatives were skipped) should be shown with the results.
+- Display `method.weather.attribution` wherever weather data is shown.
+
+**Errors** use one shape and never include stack traces, keys or provider payloads (details go to the server log):
+
+```json
+{"error": {"code": "validation_error", "message": "The request is invalid.",
+           "fields": {"departure_datetime": ["Include a UTC offset (for example -05:00 or Z); times without one are ambiguous."]}}}
+```
+
+| Status | `error.code` | When |
+| --- | --- | --- |
+| 400 | `validation_error` (with `fields`, keyed like `origin.latitude`, `body`), `invalid_json` | invalid input or malformed JSON |
+| 405 / 415 | `method_not_allowed` / `unsupported_media_type` | not POST / not `application/json` |
+| 422 | `no_route_found` | inputs are valid but no drivable route exists |
+| 502 | `routing_failed`, `weather_failed` | the provider returned an error or unusable data |
+| 503 | `routing_unavailable`, `routing_rate_limited`, `weather_rate_limited` | missing/rejected credentials, or quota/rate limit |
+| 504 | `routing_timeout`, `weather_timeout` | the provider did not answer in time |
+| 500 | `internal_error` | unexpected failure |
+
+A routing failure is never returned as a successful empty list. A weather *provider* failure fails the request (502/504); weather that
+is merely unavailable for some checkpoints (outside the forecast range, missing hours) is reported per checkpoint with the reasons above.
+
+`GET /api/health/` is unchanged and does not call any external service.
+
+Tests for this contract are in `backend/trips/tests/test_api.py` (fake providers; no network or keys).

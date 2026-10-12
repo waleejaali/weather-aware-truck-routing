@@ -270,6 +270,7 @@ class RecommendationTests(TestCase):
 
     def test_assumptions_state_method_limits_and_the_wind_metric_used(self):
         text = " ".join(assess([self.straight], interval_miles=25).assumptions)
+        self.assertIn("not a guarantee that any route is safe", text)
         self.assertIn("every 25 miles", text)
         self.assertIn("hazards between checkpoints can be missed", text)
         self.assertIn("estimates", text)

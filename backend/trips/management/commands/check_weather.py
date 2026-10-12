@@ -16,8 +16,8 @@ from routing.checkpoints import METERS_PER_MILE
 from routing.errors import RoutingError
 from routing.management.commands.check_routing import DEFAULT_DESTINATION, DEFAULT_ORIGIN, parse_coordinate
 from routing.providers import get_routing_provider
-from routing.services.route_planner import RoutePlanner
-from trips.assessment import ALLOWED_INTERVALS_MILES, WIND_METRICS, assess_routes
+from trips.assessment import ALLOWED_INTERVALS_MILES, WIND_METRICS
+from trips.services import assess_trip
 from weather.errors import WeatherProviderError
 from weather.providers import get_weather_provider
 
@@ -55,16 +55,18 @@ class Command(BaseCommand):
             f"checkpoints every {options['interval_miles']} mi, wind metric: {options['wind_metric']}"
         )
         try:
-            plan = RoutePlanner(routing_provider).plan(origin, destination)
-            trip = assess_routes(
-                plan.routes,
+            result = assess_trip(
+                origin,
+                destination,
                 departure=departure,
                 load_lb=options["load_lb"],
                 interval_miles=options["interval_miles"],
-                provider=weather_provider,
+                routing_provider=routing_provider,
+                weather_provider=weather_provider,
                 now=now,
                 wind_metric=options["wind_metric"],
             )
+            plan, trip = result.plan, result.assessment
         except (RoutingError, WeatherProviderError) as exc:
             raise CommandError(f"{type(exc).__name__}: {exc}")
 
