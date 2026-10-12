@@ -64,6 +64,9 @@ REST_FRAMEWORK = {
 # External API configuration, consumed by the provider adapters.
 ORS_API_KEY = os.environ.get("ORS_API_KEY", "")
 ORS_BASE_URL = os.environ.get("ORS_BASE_URL", "https://api.openrouteservice.org")
+# Vehicle profile is explicit: requests never silently fall back to another profile.
+ORS_PROFILE = os.environ.get("ORS_PROFILE", "driving-hgv")
+ORS_TIMEOUT_SECONDS = float(os.environ.get("ORS_TIMEOUT_SECONDS", "30"))
 OPEN_METEO_BASE_URL = os.environ.get("OPEN_METEO_BASE_URL", "https://api.open-meteo.com")
 
 LANGUAGE_CODE = "en-us"
