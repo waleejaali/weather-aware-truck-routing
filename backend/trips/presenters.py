@@ -146,7 +146,8 @@ def _checkpoint(c: CheckpointAssessment) -> dict[str, Any]:
         "latitude": round(c.checkpoint.coordinate.lat, 5),
         "longitude": round(c.checkpoint.coordinate.lon, 5),
         "eta": _iso(c.eta),
-        "weather_status": "unavailable" if cond is None else ("complete" if c.complete else "partial"),
+        # "unavailable" means no usable measurement at all, so a checkpoint with nothing known never reads as partial.
+        "weather_status": "unavailable" if risk is None or risk.level is None else ("complete" if c.complete else "partial"),
         "weather_missing_reason": c.unavailable_reason,
         "weather": {
             "wind_speed_mph": _r(cond and cond.wind_mph),
@@ -203,8 +204,6 @@ def _ranking_explanation(r: RouteAssessment, ordered: tuple[RouteAssessment, ...
 def _decisive(better: RouteAssessment, worse: RouteAssessment) -> str:
     # Checks criteria in the same order as risk.ranking so the explanation matches the actual ranking.
     a, b = better.summary, worse.summary
-    if a.data_complete and not b.data_complete:
-        return "complete weather data where the other route has gaps"
     for level, name in ((RiskLevel.SEVERE, "Severe"), (RiskLevel.HIGH, "High")):
         x, y = round(a.miles(level), 2), round(b.miles(level), 2)
         if x < y:
@@ -218,6 +217,8 @@ def _decisive(better: RouteAssessment, worse: RouteAssessment) -> str:
             f"a shorter travel time ({_duration_text(better.route.duration_s)} vs "
             f"{_duration_text(worse.route.duration_s)})"
         )
+    if a.data_complete and not b.data_complete:
+        return "equal Severe miles, High miles, average risk and travel time, but complete weather data where the other route has gaps"
     return "equal ranking on every criterion"
 
 

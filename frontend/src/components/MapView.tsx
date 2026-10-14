@@ -2,6 +2,7 @@ import type { CircleMarker as LeafletCircleMarker } from 'leaflet'
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import type { Checkpoint, ColorBy, RouteAssessment } from '../api/types'
+import { confidentLevel, isLowerBound, missingMeasurements } from '../lib/checkpoints'
 import { boundsOf, levelFor, riskSegments, toLatLng, type Bounds, type LatLng } from '../lib/geo'
 import { RECOMMENDED_COLOR, riskMeta } from '../lib/risk'
 import { formatLocalDateTime } from '../lib/time'
@@ -53,6 +54,7 @@ function FocusCheckpoint({ markers, index }: { markers: RefObject<Map<number, Le
 function CheckpointPopup({ route, checkpoint }: { route: RouteAssessment; checkpoint: Checkpoint }) {
   const w = checkpoint.weather
   const r = checkpoint.risk
+  const missing = missingMeasurements(checkpoint)
   return (
     <div className="min-w-[14rem] space-y-1 text-sm">
       <p className="font-semibold">
@@ -70,8 +72,14 @@ function CheckpointPopup({ route, checkpoint }: { route: RouteAssessment; checkp
         <dd><Reading value={w.snow_in_per_hr} unit="in/hr" digits={2} /> <RiskBadge level={r.snow} size="xs" /></dd>
       </dl>
       <p>
-        Combined: <RiskBadge level={r.combined} />
+        Combined: <RiskBadge level={confidentLevel(checkpoint)} />
       </p>
+      {missing.length > 0 ? (
+        <p className="font-medium text-amber-300">
+          Not fully known: {missing.join(', ')} missing.
+          {isLowerBound(checkpoint) && r.combined ? ` Measured values alone read ${riskMeta(r.combined).label}, which is not confirmed.` : ''}
+        </p>
+      ) : null}
       {r.load_override ? (
         <p>
           Load rule: <RiskBadge level={r.load_override} size="xs" />
@@ -182,7 +190,7 @@ export function MapView({
                   }}
                   center={[checkpoint.latitude, checkpoint.longitude]}
                   radius={focused ? 10 : 6}
-                  pathOptions={{ color: '#e8f1f5', weight: focused ? 3 : 1.5, fillColor: meta.color, fillOpacity: 1 }}
+                  pathOptions={{ color: '#e8f1f5', weight: focused ? 3 : 1.5, fillColor: meta.color, fillOpacity: 1, dashArray: checkpoint.weather_status === 'complete' ? undefined : '3 3' }}
                   eventHandlers={{ click: () => onCheckpointClick(selected.id, checkpoint.index) }}
                 >
                   <Popup>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RecommendationStatus } from '../api/types'
@@ -159,6 +159,22 @@ describe('CheckpointTable', () => {
     expect(within(missingRow).getByText(/beyond the forecast horizon/)).toBeInTheDocument()
     expect(within(missingRow).getAllByText('Unknown')).toHaveLength(4) // wind, rain, snow and combined
     expect(missingRow.textContent).not.toMatch(/\b0\.0+ (mph|in\/hr)/)
+  })
+
+  it('says in text that a partial checkpoint is not fully known and does not show it as a plain Low', () => {
+    const partialLow = makeCheckpoint(5, {
+      weather_status: 'partial',
+      weather_missing_reason: 'provider has no wind data for the hour of arrival',
+      weather: { wind_speed_mph: null, wind_gust_mph: null, rain_in_per_hr: 0, snow_in_per_hr: 0, wind_used_mph: null },
+      risk: { combined: 'low', wind: null, rain: 'low', snow: 'low', load_override: null, reasons: [] },
+    })
+    render(<CheckpointTable rows={[partialLow]} routeName="Route 1" windMetric="sustained" focusedIndex={null} onLocate={() => {}} />)
+    const row = screen.getAllByRole('row')[1]
+    expect(within(row).getByText('Not fully known: wind missing')).toBeInTheDocument()
+    expect(within(row).getByText('Partial')).toBeInTheDocument()
+    expect(within(row).getAllByText('Unknown').length).toBeGreaterThan(0) // wind and the combined level
+    expect(within(row).getAllByText('No data').length).toBeGreaterThan(0)
+    expect(within(row).getAllByText(/0\.00/).length).toBe(2) // observed zero rain and snow stay zero
   })
 
   it('keeps partial observations and shows their gap, hazard levels and the load rule', () => {
@@ -372,6 +388,54 @@ describe('ForecastSlider (Explore departure times)', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Not assessed yet')
     await waitFor(() => expect(onCommit).toHaveBeenCalledTimes(1), { timeout: 2000 })
     expect(onCommit).toHaveBeenCalledWith(7)
+  })
+
+  it('commits only the final position after rapid slider movement', async () => {
+    vi.useFakeTimers()
+    try {
+      const onCommit = vi.fn()
+      render(<ForecastSlider {...props({ onCommit })} />)
+      const slider = screen.getByRole('slider')
+      for (const v of ['1', '2', '3', '5', '8', '13', '21', '34', '47']) {
+        fireEvent.change(slider, { target: { value: v } })
+        act(() => {
+          vi.advanceTimersByTime(200) // faster than the settle delay
+        })
+      }
+      expect(onCommit).not.toHaveBeenCalled()
+      act(() => {
+        vi.advanceTimersByTime(700)
+      })
+      expect(onCommit).toHaveBeenCalledTimes(1)
+      expect(onCommit).toHaveBeenCalledWith(47)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stays within 0 to 48 hours in whole-hour steps', () => {
+    render(<ForecastSlider {...props()} />)
+    const slider = screen.getByRole('slider')
+    expect(slider).toHaveAttribute('min', '0')
+    expect(slider).toHaveAttribute('max', '48')
+    expect(slider).toHaveAttribute('step', '1')
+    expect(slider).toHaveAccessibleName(/hours after the entered departure/i)
+  })
+
+  it('does not request a departure after the slider is unmounted', () => {
+    vi.useFakeTimers()
+    try {
+      const onCommit = vi.fn()
+      const { unmount } = render(<ForecastSlider {...props({ onCommit })} />)
+      fireEvent.change(screen.getByRole('slider'), { target: { value: '7' } })
+      unmount()
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(onCommit).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not present stale or failed departures as assessed', () => {

@@ -30,6 +30,7 @@ _EXPECTED_UNITS = {
 MAX_LOCATIONS_PER_REQUEST = 50
 PAST_DAYS_AVAILABLE = 92
 FORECAST_DAYS_AVAILABLE = 16
+_SUM_DECIMALS = 6  # far finer than the API's own resolution (0.01 in), only removes float noise
 _DEDUPE_DECIMALS = 2  # ~1.1 km, finer than the weather model grid
 
 
@@ -144,7 +145,8 @@ class OpenMeteoProvider(WeatherProvider):
                 wind_speed_mph=_number(columns["wind_speed_10m"][i]),
                 wind_gust_mph=_number(columns["wind_gusts_10m"][i]),
                 # If either rain or showers is missing, don't assume it was zero.
-                rain_in=None if rain is None or showers is None else rain + showers,
+                # Rounded so 0.01 + 0.09 is 0.10, not 0.0999..., which would land in the wrong risk band.
+                rain_in=None if rain is None or showers is None else round(rain + showers, _SUM_DECIMALS),
                 snow_in=_number(columns["snowfall"][i]),
             )
         grid = None

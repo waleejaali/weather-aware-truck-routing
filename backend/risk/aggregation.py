@@ -31,7 +31,8 @@ class RouteRiskSummary:
 
     @property
     def coverage(self) -> float:
-        return self.known_miles / self.total_miles if self.total_miles > 0 else 0.0
+        # Rounded so float noise in summed segment lengths can't push exactly-80% coverage to 0.7999999999999999.
+        return round(self.known_miles / self.total_miles, 9) if self.total_miles > 0 else 0.0
 
     def miles(self, level: RiskLevel) -> float:
         return self.miles_by_level[level]

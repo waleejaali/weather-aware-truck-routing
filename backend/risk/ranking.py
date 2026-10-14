@@ -29,15 +29,18 @@ def rank_routes(
 
     def key(i: int):
         s = summaries[i]
-        # Rounded so float noise can't decide a tie. Complete weather beats gaps: missing data isn't "safe".
+        # Eligibility (no No Travel checkpoint, enough weather coverage) is a gate, not a ranking criterion.
+        # Among eligible routes the order is exactly the assignment's: Severe miles, High miles, average risk,
+        # travel time. Values are rounded so float noise can't decide a tie. Only when all four tie does complete
+        # weather data break the tie (missing data isn't "safe"); after that, input order (fastest first) decides.
         return (
             0 if eligible[i] else 1,
             round(s.miles(RiskLevel.NO_TRAVEL), 2),
-            0 if s.data_complete else 1,
             round(s.miles(RiskLevel.SEVERE), 2),
             round(s.miles(RiskLevel.HIGH), 2),
             round(s.average_score, 3) if s.average_score is not None else math.inf,
             durations_s[i],
+            0 if s.data_complete else 1,
         )
 
     order = tuple(sorted(range(len(summaries)), key=key))

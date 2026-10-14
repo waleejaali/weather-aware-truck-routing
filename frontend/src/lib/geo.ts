@@ -1,3 +1,4 @@
+import { confidentLevel } from './checkpoints'
 import type { Checkpoint, ColorBy, RiskKey, RouteAssessment } from '../api/types'
 
 export type LatLng = [number, number]
@@ -49,7 +50,7 @@ export interface RiskSegment {
 }
 
 export function levelFor(checkpoint: Checkpoint, colorBy: ColorBy): RiskKey | null {
-  return checkpoint.risk[colorBy]
+  return confidentLevel(checkpoint, colorBy)
 }
 
 // Each checkpoint covers the road halfway to its neighbours, matching how the backend counts risk miles.

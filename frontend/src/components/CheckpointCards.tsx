@@ -1,4 +1,5 @@
 import type { Checkpoint } from '../api/types'
+import { confidentLevel, missingMeasurements } from '../lib/checkpoints'
 import { formatLocalDateTime } from '../lib/time'
 import { Hazard } from './CheckpointTable'
 import { IconChevronRight } from './icons'
@@ -35,7 +36,10 @@ export function CheckpointCards({ rows, windMetric, focusedIndex, onLocate }: Pr
               </div>
               <div className="text-right">
                 <p className="eyebrow">Combined</p>
-                <RiskDot level={c.risk.combined} />
+                <RiskDot level={confidentLevel(c)} />
+                  {missingMeasurements(c).length > 0 ? (
+                    <p className="mt-0.5 text-xs font-medium text-amber-300">Not fully known: {missingMeasurements(c).join(', ')} missing</p>
+                  ) : null}
                 {c.risk.load_override ? (
                   <p className="mt-1 text-xs text-muted">
                     Load rule: <RiskDot level={c.risk.load_override} size="xs" />

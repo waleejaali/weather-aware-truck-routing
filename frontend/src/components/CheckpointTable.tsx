@@ -1,4 +1,5 @@
 import type { Checkpoint, RiskKey } from '../api/types'
+import { confidentLevel, missingMeasurements } from '../lib/checkpoints'
 import { formatLocalDateTime } from '../lib/time'
 import { IconChevronRight } from './icons'
 import { RiskDot } from './RiskBadge'
@@ -66,7 +67,10 @@ export function CheckpointTable({ rows, routeName, windMetric, focusedIndex, onL
                 <td className="px-5 py-4"><Hazard value={w.rain_in_per_hr} unit="in/hr" digits={2} level={c.risk.rain} /></td>
                 <td className="px-5 py-4"><Hazard value={w.snow_in_per_hr} unit="in/hr" digits={2} level={c.risk.snow} /></td>
                 <td className="px-5 py-4">
-                  <RiskDot level={c.risk.combined} />
+                  <RiskDot level={confidentLevel(c)} />
+                  {missingMeasurements(c).length > 0 ? (
+                    <p className="mt-0.5 text-xs font-medium text-amber-300">Not fully known: {missingMeasurements(c).join(', ')} missing</p>
+                  ) : null}
                   {c.risk.load_override ? (
                     <p className="mt-1 text-xs text-muted">
                       Load rule: <RiskDot level={c.risk.load_override} size="xs" />

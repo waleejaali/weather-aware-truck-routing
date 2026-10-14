@@ -75,6 +75,9 @@ export function toApiError(err: unknown): ApiError {
   if (status === 422) {
     return new ApiError('no_route', body.message ?? 'No drivable route could be found between these points.', extra)
   }
+  if (status === 429) {
+    return new ApiError('provider', body.message ?? 'The service is busy. Try again shortly.', extra)
+  }
   if (status === 502 || status === 503 || status === 504) {
     return new ApiError('provider', body.message ?? 'A routing or weather service is unavailable. Try again shortly.', extra)
   }

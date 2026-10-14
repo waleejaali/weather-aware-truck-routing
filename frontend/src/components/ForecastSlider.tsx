@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RecommendationStatus } from '../api/types'
 import type { BatchStats } from '../hooks/useAssessment'
 import { statusInfo } from '../lib/status'
@@ -67,6 +67,8 @@ export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries,
     setPending(shownOffset)
   }
   const timer = useRef<number | undefined>(undefined)
+  // A pending request for a departure the user already moved away from must not fire after this unmounts.
+  useEffect(() => () => window.clearTimeout(timer.current), [])
 
   const byOffset = new Map(summaries.map((s) => [s.offsetHours, s]))
   const usable = (offset: number) => byOffset.get(offset)?.state === 'ok'

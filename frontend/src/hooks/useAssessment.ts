@@ -77,6 +77,7 @@ export function useAssessment() {
     stateRef.current = state
   }, [state])
   const controller = useRef<AbortController | null>(null)
+  useEffect(() => () => controller.current?.abort(), [])
 
   const run = useCallback(async (base: AssessRequest, offsets: readonly number[], show: number, isNewTrip: boolean) => {
     controller.current?.abort()
@@ -102,6 +103,7 @@ export function useAssessment() {
     }
     try {
       const batch = await assessBatch(request, abort.signal)
+      if (abort.signal.aborted) return // superseded while in flight: a newer selection owns the state now
       const at = Date.now()
       const fresh = toEntries(batch, offsets, asked, at)
       const wanted = fresh[show]
@@ -120,7 +122,7 @@ export function useAssessment() {
       }))
     } catch (err) {
       const error = err instanceof ApiError ? err : new ApiError('unexpected', 'Something went wrong while assessing routes.')
-      if (error.kind === 'cancelled') return // superseded by a newer request
+      if (error.kind === 'cancelled' || abort.signal.aborted) return // superseded by a newer request
       setState((s) => ({ ...s, phase: 'error', error }))
     }
   }, [])
@@ -133,7 +135,8 @@ export function useAssessment() {
       if (!s.base) return
       const entry = s.entries[offset]
       if (entry?.kind === 'ok' && !isStale(entry)) {
-        setState((prev) => ({ ...prev, shownOffset: offset, phase: 'success', error: null }))
+        controller.current?.abort() // a slower request for another departure must not replace this choice later
+        setState((prev) => ({ ...prev, shownOffset: offset, requestedOffset: offset, phase: 'success', error: null }))
         return
       }
       void run(s.base, [offset], offset, false)

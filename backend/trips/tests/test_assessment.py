@@ -232,14 +232,29 @@ class RecommendationTests(TestCase):
         self.assertEqual(trip.status, STATUS_RECOMMENDED)
         self.assertTrue(any("Route 1 cannot be recommended" in n for n in trip.notes))
 
-    def test_small_gap_keeps_route_eligible_but_ranks_it_after_complete_routes(self):
-        trip = assess([self.straight, self.north], self.missing_in_band(-102, -100))  # only a few percent
+    def test_small_gap_keeps_route_eligible_and_the_stated_criteria_decide_the_order(self):
+        # The faster route (north) loses a few percent of its weather; everything else is calm and complete.
+        def weather(c, h):
+            on_north = c.lat > self.straight_line_lat(c.lon) + 0.2 and -102 < c.lon < -100
+            return None if on_north else CALM
+
+        trip = assess([self.straight, self.north], FakeWeatherProvider(weather))
+        north = next(r for r in trip.routes if r.plan_index == 1)
         straight = next(r for r in trip.routes if r.plan_index == 0)
-        self.assertTrue(straight.eligible)
-        self.assertFalse(straight.summary.data_complete)
-        self.assertGreater(straight.weather_coverage, 0.8)
+        self.assertLess(north.route.duration_s, straight.route.duration_s)
+        self.assertTrue(north.eligible)
+        self.assertFalse(north.summary.data_complete)
+        self.assertGreater(north.weather_coverage, 0.8)
+        self.assertTrue(straight.summary.data_complete)
+        # Severe, High and average tie; travel time decides, so the gappy route is recommended, never hidden.
         self.assertEqual(trip.recommended.plan_index, 1)
-        self.assertTrue(any("ranked after" in n for n in trip.notes))
+        self.assertEqual(trip.status, STATUS_RECOMMENDED_INCOMPLETE)
+        self.assertTrue(any("may be understated" in n for n in trip.notes))
+
+    def test_a_gappy_route_does_not_beat_a_complete_route_that_is_faster(self):
+        trip = assess([self.straight, self.north], self.missing_in_band(-102, -100))  # straight (slower) is gappy
+        self.assertEqual(trip.recommended.plan_index, 1)
+        self.assertEqual(trip.status, STATUS_RECOMMENDED)
 
     def test_only_route_with_a_small_gap_is_recommended_with_an_explicit_warning(self):
         trip = assess([self.straight], self.missing_in_band(-102, -100))

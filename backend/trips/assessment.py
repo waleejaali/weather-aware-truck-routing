@@ -198,10 +198,13 @@ def assess_routes(
         notes.append("The recommended route has checkpoints with missing weather data; its risk may be understated.")
     else:
         status = STATUS_RECOMMENDED
-    if recommended and recommended.summary.data_complete and any(
-        r.eligible and not r.summary.data_complete for r in ordered
-    ):
-        notes.append("Routes with missing weather data are ranked after routes with complete data.")
+    eligible_routes = [r for r in ordered if r.eligible]
+    for position, r in enumerate(eligible_routes):
+        if not r.summary.data_complete and any(o.summary.data_complete for o in eligible_routes[position + 1 :]):
+            notes.append(
+                f"Route {r.plan_index + 1} is ranked above a route with complete weather data on the stated criteria, "
+                "but its own weather data has gaps, so its risk may be understated."
+            )
 
     return TripAssessment(
         routes=ordered,
