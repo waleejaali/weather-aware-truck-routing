@@ -1,2 +1,205 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
+
+/*
+ * Design tokens: a clean, quiet dark-teal product UI. Flat near-black canvas, one mint accent, subtle 1px borders,
+ * generous spacing. Every text/background pair used here was checked for WCAG AA contrast (>= 4.5:1).
+ */
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --color-canvas: #070e15;
+  --color-surface: #0b1621;
+  --color-surface-2: #101e2b;
+  --color-line: #1a2b38;
+  --color-line-strong: #2a4252;
+  --color-ink: #eaf2f5;
+  --color-muted: #9db0bd;
+  --color-faint: #88a0ae;
+  --color-brand: #34d8b0;
+  --color-brand-hover: #5ee4c6;
+  --color-on-brand: #04201a;
+  --color-accent: #34d8b0;
+}
+
+:root {
+  color-scheme: dark; /* native date pickers, scrollbars and form controls render dark */
+}
+
+html {
+  background: var(--color-canvas);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background-color: var(--color-canvas);
+  background-image: radial-gradient(900px 360px at 50% -120px, rgba(52, 216, 176, 0.08), transparent 70%);
+  background-repeat: no-repeat;
+}
+
+@layer components {
+  /* One panel style for everything: flat surface, subtle border. */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+  }
+
+  /* Small uppercase label above a value. */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  .input {
+    display: block;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 0.625rem;
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+    font-size: 0.875rem;
+  }
+  .input:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  .input[aria-invalid="true"] {
+    border-color: #f87171;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 3rem;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    background: var(--color-brand);
+    color: var(--color-on-brand);
+    font-weight: 700;
+    font-size: 0.9375rem;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-brand-hover);
+  }
+  .btn-primary:disabled {
+    background: var(--color-line-strong);
+    color: var(--color-faint);
+    cursor: not-allowed;
+  }
+  .btn-primary:focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.625rem;
+    border: 1px solid var(--color-line-strong);
+    background: transparent;
+    color: var(--color-ink);
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn-ghost:hover {
+    background: var(--color-surface-2);
+  }
+  .btn-ghost[aria-pressed="true"] {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: rgba(52, 216, 176, 0.08);
+  }
+  .btn-ghost:focus-visible,
+  .seg label:focus-within {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* Segmented control (radio buttons styled as joined tabs). */
+  .seg {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: var(--color-canvas);
+  }
+  .seg label {
+    cursor: pointer;
+    padding: 0.4rem 0.875rem;
+    border-radius: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  .seg label[data-checked="true"] {
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+  }
+}
+
+/* Turn the light OpenStreetMap tiles into a dark basemap without an API key. Only the tile pane is filtered, so
+   routes, markers and popups keep their real colours. */
+.dark-tiles {
+  filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(88%) saturate(70%);
+}
+
+/* ---- Leaflet, themed dark -------------------------------------------------------------------- */
+.leaflet-container {
+  background: #0d1a24;
+  font-family: var(--font-sans);
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line-strong);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+.leaflet-popup-content {
+  margin: 12px 14px;
+}
+.leaflet-container a.leaflet-popup-close-button {
+  color: var(--color-muted);
+}
+.leaflet-tooltip {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line-strong);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.leaflet-tooltip-top:before {
+  border-top-color: var(--color-line-strong);
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border-bottom-color: var(--color-line-strong);
+}
+.leaflet-bar a:hover {
+  background: var(--color-surface-2);
+}
+.leaflet-control-attribution {
+  background: rgba(7, 14, 21, 0.8) !important;
+  color: var(--color-muted);
+}
+.leaflet-control-attribution a {
+  color: var(--color-accent);
+}

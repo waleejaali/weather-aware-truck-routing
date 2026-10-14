@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { boundsOf, cumulativeFractions, haversineMeters, riskSegments, toLatLng } from './geo'
-import { formatDuration, formatIsoWithOffset, localInputToIso, shiftIsoByHours } from './time'
+import { checkpointsToCsv, csvFilename } from './csv'
+import { PRESETS, placeName, presetFor } from './presets'
+import { compactDuration, formatDuration, formatIsoWithOffset, localInputToIso, shiftIsoByHours } from './time'
 import { mapServerFieldErrors, validateForm, type FormValues } from './validation'
 import { makeCheckpoint, makeRoute, MISSING_CHECKPOINT } from '../test/fixtures'
 
@@ -180,5 +182,57 @@ describe('formatting stays honest about missing data', () => {
   it('has no placeholder zeros in the missing-data fixture', () => {
     const c = MISSING_CHECKPOINT(0)
     expect(Object.values(c.weather).every((v) => v === null)).toBe(true)
+  })
+})
+
+describe('compact duration', () => {
+  it('formats big card numbers', () => {
+    expect(compactDuration(58_620)).toBe('16h 17m')
+    expect(compactDuration(1_800)).toBe('30m')
+  })
+})
+
+describe('quick trip presets', () => {
+  it('recognises a preset from its coordinates, tolerating formatting', () => {
+    const chicago = PRESETS[1].values
+    expect(presetFor(chicago)?.id).toBe('chicago-atlanta')
+    expect(presetFor({ ...chicago, originLat: '41.87810' })?.id).toBe('chicago-atlanta')
+    expect(presetFor({ ...chicago, originLat: '41.9' })).toBeUndefined()
+    expect(presetFor({ originLat: '', originLon: '', destLat: '', destLon: '' })).toBeUndefined()
+  })
+
+  it('names only places it actually knows', () => {
+    expect(placeName('34.0522', '-118.2437')).toBe('Los Angeles')
+    expect(placeName('32.7767', '-96.797')).toBe('Dallas')
+    expect(placeName('0', '0')).toBeUndefined()
+  })
+})
+
+describe('checkpoint CSV', () => {
+  const route = makeRoute(1, {
+    checkpoints: [makeCheckpoint(0), MISSING_CHECKPOINT(1), makeCheckpoint(2, { weather_missing_reason: 'provider has "no" rain, data' })],
+  })
+
+  it('has a header, one row per checkpoint and CRLF line ends', () => {
+    const lines = checkpointsToCsv(route).split('\r\n')
+    expect(lines).toHaveLength(5) // header + 3 rows + trailing empty
+    expect(lines[0].split(',')).toHaveLength(17)
+    expect(lines[1].split(',')[0]).toBe('route-1')
+  })
+
+  it('leaves missing weather empty instead of writing zeros', () => {
+    const missing = checkpointsToCsv(route).split('\r\n')[2].split(',')
+    expect(missing[5]).toBe('') // wind
+    expect(missing[8]).toBe('') // snow
+    expect(missing[13]).toBe('') // combined risk
+    expect(missing[15]).toBe('unavailable')
+  })
+
+  it('quotes values containing commas and quotes', () => {
+    expect(checkpointsToCsv(route)).toContain('"provider has ""no"" rain, data"')
+  })
+
+  it('names the file after the route and departure date', () => {
+    expect(csvFilename(route)).toBe('route-1-checkpoints-2026-10-14.csv')
   })
 })

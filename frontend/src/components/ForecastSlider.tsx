@@ -3,22 +3,27 @@ import type { RecommendationStatus } from '../api/types'
 import type { BatchStats } from '../hooks/useAssessment'
 import { statusInfo } from '../lib/status'
 import { formatLocalDateTime, shiftIsoByHours } from '../lib/time'
+import { IconClock, IconInfo } from './icons'
 
 export const MAX_FORECAST_OFFSET_HOURS = 48
 const COMMIT_DELAY_MS = 600
-const QUICK_OFFSETS = [0, 6, 12, 18, 24, 30, 36, 42, 48]
+const TAB_OFFSETS = [0, 6, 12, 18, 24, 30, 36, 42, 48]
 
+/** What is known about one departure offset, derived from the assessments held for this trip. */
 export interface OffsetSummary {
   offsetHours: number
   state: 'ok' | 'stale' | 'error'
   status?: RecommendationStatus
   recommendedRouteId?: string | null
+  /** Minutes since this offset was assessed (ok/stale). */
   ageMinutes?: number
   message?: string
 }
 
 interface Props {
+  /** The departure the user submitted (offset 0). */
   baseDeparture: string
+  /** Offset whose assessment is displayed. */
   shownOffset: number
   loading: boolean
   summaries: OffsetSummary[]
@@ -39,9 +44,23 @@ function ageText(minutes: number): string {
   return `${Math.round(minutes / 60)} h ago`
 }
 
+/** The second line of a departure tab: the recommended route, or why there isn't one. */
+function tabSubtitle(s: OffsetSummary | undefined): string {
+  if (!s) return 'Not assessed'
+  if (s.state === 'error') return 'Failed - retry'
+  const base = s.recommendedRouteId ? `${s.recommendedRouteId.replace('route-', 'Route ')}${s.status === 'recommended_incomplete_weather' ? ' (incomplete)' : ''}` : STATUS_SHORT[s.status!]
+  return s.state === 'stale' ? `${base} · stale, refresh` : base
+}
+
+/**
+ * "Explore departure times" (0-48 h after the entered departure). A bounded set of offsets is assessed together
+ * when the trip is submitted (one server request, one route plan, one weather fetch). Other positions are
+ * assessed on release, and old results are re-requested rather than shown as current. Weather is never
+ * estimated in the browser.
+ */
 export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries, lastBatch, onCommit }: Props) {
   const [pending, setPending] = useState(shownOffset)
-  // Sync to shownOffset during render instead of in an effect, to avoid a flash of the old value.
+  // When a different departure becomes the displayed one, follow it ("adjust state while rendering").
   const [seenShown, setSeenShown] = useState(shownOffset)
   if (shownOffset !== seenShown) {
     setSeenShown(shownOffset)
@@ -51,12 +70,14 @@ export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries,
 
   const byOffset = new Map(summaries.map((s) => [s.offsetHours, s]))
   const usable = (offset: number) => byOffset.get(offset)?.state === 'ok'
+  // The standard tabs plus any custom offset the user has assessed (for example +7 h).
+  const offsets = [...new Set([...TAB_OFFSETS, ...summaries.map((s) => s.offsetHours)])].sort((a, b) => a - b)
 
   const change = (value: number, immediate = false) => {
     setPending(value)
     window.clearTimeout(timer.current)
     if (value === shownOffset && usable(value)) return
-    // Debounce requests while dragging; fresh results can be shown immediately.
+    // Already assessed and fresh: show it right away. Otherwise wait until the slider settles, then request it.
     if (immediate || usable(value)) onCommit(value)
     else timer.current = window.setTimeout(() => onCommit(value), COMMIT_DELAY_MS)
   }
@@ -71,15 +92,44 @@ export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries,
   else hint = 'Not assessed yet. Release the slider to assess this departure.'
 
   return (
-    <section aria-label="Forecast departure time" className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-base font-semibold text-slate-900">Forecast: depart later</h3>
-        <p className="text-sm font-medium text-slate-900" aria-live="polite">
-          {pending === 0 ? 'Departing as entered' : `Departing +${pending} h`}: {formatLocalDateTime(departure)}
+    <section aria-label="Forecast departure time" className="card p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <h2 className="flex items-center gap-2.5 text-base font-semibold text-ink">
+          <IconClock size={18} className="text-muted" />
+          Explore departure times
+        </h2>
+        <p className="text-sm text-muted" aria-live="polite">
+          {pending === 0 ? 'Departing as entered' : `Departing +${pending} h`} · {formatLocalDateTime(departure)}
         </p>
       </div>
 
-      <div className="relative mt-3">
+      <ul className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
+        {offsets.map((h) => {
+          const s = byOffset.get(h)
+          const active = h === shownOffset
+          return (
+            <li key={h}>
+              <button
+                type="button"
+                onClick={() => change(h, true)}
+                aria-pressed={pending === h}
+                aria-current={active ? 'true' : undefined}
+                title={s?.status ? statusInfo(s.status).title : s?.message}
+                className={`h-full w-full rounded-xl border px-2 py-3 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                  active ? 'border-line-strong bg-surface-2' : 'border-transparent hover:bg-surface-2/60'
+                } ${s?.state === 'error' ? 'border-red-400/50' : ''}`}
+              >
+                <span className={`block text-sm font-semibold ${active ? 'text-ink' : 'text-muted'}`}>{h === 0 ? 'As entered' : `+${h} h`}</span>
+                <span className={`mt-1 block text-[11px] leading-tight ${active ? 'text-accent' : s?.state === 'error' ? 'text-red-300' : s?.state === 'stale' ? 'text-amber-300' : 'text-faint'}`}>
+                  {tabSubtitle(s)}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="relative mt-5">
         <input
           type="range"
           min={0}
@@ -89,86 +139,40 @@ export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries,
           onChange={(e) => change(Number(e.target.value))}
           aria-label="Hours after the entered departure time"
           aria-valuetext={`${pending} hours after departure, ${formatLocalDateTime(departure)}`}
-          className="w-full accent-indigo-700"
+          className="w-full accent-accent"
         />
+        {/* Marks show which departures actually have an assessment (filled), a stale one (amber) or a failure (outline). */}
         <div className="pointer-events-none relative mx-[7px] h-3" aria-hidden="true">
           {summaries.map((s) => (
             <span
               key={s.offsetHours}
               title={`+${s.offsetHours} h: ${s.state === 'error' ? 'failed' : s.state === 'stale' ? 'assessed, now stale' : 'assessed'}`}
-              className={`absolute top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full border text-[8px] leading-none ${
-                s.state === 'ok' ? 'border-indigo-700 bg-indigo-700' : s.state === 'stale' ? 'border-amber-600 bg-amber-300' : 'border-red-700 bg-white'
+              className={`absolute top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full border ${
+                s.state === 'ok' ? 'border-accent bg-accent' : s.state === 'stale' ? 'border-amber-400 bg-amber-400' : 'border-red-400 bg-surface'
               }`}
               style={{ left: `${(s.offsetHours / MAX_FORECAST_OFFSET_HOURS) * 100}%` }}
             />
           ))}
         </div>
       </div>
-      <div className="flex justify-between text-[11px] text-slate-500" aria-hidden="true">
-        <span>0 h</span>
-        <span>12 h</span>
-        <span>24 h</span>
-        <span>36 h</span>
-        <span>48 h</span>
-      </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {QUICK_OFFSETS.map((h) => (
-          <button
-            key={h}
-            type="button"
-            onClick={() => change(h, true)}
-            aria-pressed={pending === h}
-            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-              pending === h ? 'border-indigo-700 bg-indigo-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            {h === 0 ? 'As entered' : `+${h} h`}
-          </button>
-        ))}
-      </div>
-
-      <p className="mt-3 text-xs text-slate-700" role="status">
+      <p className="mt-3 text-sm text-ink" role="status">
         {hint}
       </p>
-      <p className="mt-1 text-xs text-slate-600">
-        Filled marks are departures assessed by the server with real forecast data; the weather is never estimated in your browser. Forecasts
-        older than 30 minutes are refreshed, and departures beyond about 16 days ahead have no forecast.
-        {lastBatch
-          ? ` Last request: ${lastBatch.departures} departure${lastBatch.departures === 1 ? '' : 's'}, routes ${lastBatch.routeCache === 'hit' ? 'reused from the server cache' : 'planned once'}${
-              lastBatch.routingRequests !== null && lastBatch.weatherRequests !== null
-                ? ` (${lastBatch.routingRequests} routing and ${lastBatch.weatherRequests} weather provider requests)`
-                : ''
-            }.`
-          : ''}
+      <p className="mt-2 flex items-start gap-2 text-xs text-faint">
+        <IconInfo size={14} className="mt-px shrink-0" />
+        <span>
+          Filled marks are departures assessed by the server with real forecast data; the weather is never estimated in your browser. Forecasts
+          older than 30 minutes are refreshed, and departures beyond about 16 days ahead have no forecast.
+          {lastBatch
+            ? ` Last request: ${lastBatch.departures} departure${lastBatch.departures === 1 ? '' : 's'}, routes ${lastBatch.routeCache === 'hit' ? 'reused from the server cache' : 'planned once'}${
+                lastBatch.routingRequests !== null && lastBatch.weatherRequests !== null
+                  ? ` (${lastBatch.routingRequests} routing and ${lastBatch.weatherRequests} weather provider requests)`
+                  : ''
+              }.`
+            : ''}
+        </span>
       </p>
-
-      {summaries.length > 1 ? (
-        <div className="mt-3">
-          <p className="mb-1 text-xs font-medium text-slate-700">Departures assessed so far (select to view)</p>
-          <ul className="flex flex-wrap gap-1.5">
-            {summaries.map((v) => (
-              <li key={v.offsetHours}>
-                <button
-                  type="button"
-                  onClick={() => change(v.offsetHours, true)}
-                  aria-current={v.offsetHours === shownOffset ? 'true' : undefined}
-                  title={v.status ? statusInfo(v.status).title : v.message}
-                  className={`rounded-md border px-2 py-1 text-left text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    v.offsetHours === shownOffset ? 'border-indigo-700 bg-indigo-50' : 'border-slate-300 bg-white hover:bg-slate-100'
-                  }`}
-                >
-                  <span className="font-semibold">{v.offsetHours === 0 ? 'As entered' : `+${v.offsetHours} h`}</span>
-                  <br />
-                  {v.state === 'error'
-                    ? 'Failed - retry'
-                    : `${STATUS_SHORT[v.status!]}${v.recommendedRouteId ? ` · ${v.recommendedRouteId.replace('route-', 'Route ')}` : ''}${v.state === 'stale' ? ' · stale, refresh' : ''}`}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </section>
   )
 }

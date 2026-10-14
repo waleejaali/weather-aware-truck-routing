@@ -8,7 +8,7 @@ import { formatLocalDateTime } from '../lib/time'
 import { RiskBadge } from './RiskBadge'
 import { Reading } from './shared'
 
-const OTHER_ROUTE = '#64748b'
+const OTHER_ROUTE = '#8da2b1'
 
 interface Props {
   routes: RouteAssessment[]
@@ -60,13 +60,13 @@ function CheckpointPopup({ route, checkpoint }: { route: RouteAssessment; checkp
       </p>
       <p>ETA {formatLocalDateTime(checkpoint.eta)}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-        <dt className="text-slate-600">Wind</dt>
+        <dt className="text-muted">Wind</dt>
         <dd><Reading value={w.wind_speed_mph} unit="mph" /> <RiskBadge level={r.wind} size="xs" /></dd>
-        <dt className="text-slate-600">Gusts</dt>
+        <dt className="text-muted">Gusts</dt>
         <dd><Reading value={w.wind_gust_mph} unit="mph" /></dd>
-        <dt className="text-slate-600">Rain</dt>
+        <dt className="text-muted">Rain</dt>
         <dd><Reading value={w.rain_in_per_hr} unit="in/hr" digits={2} /> <RiskBadge level={r.rain} size="xs" /></dd>
-        <dt className="text-slate-600">Snow</dt>
+        <dt className="text-muted">Snow</dt>
         <dd><Reading value={w.snow_in_per_hr} unit="in/hr" digits={2} /> <RiskBadge level={r.snow} size="xs" /></dd>
       </dl>
       <p>
@@ -78,7 +78,7 @@ function CheckpointPopup({ route, checkpoint }: { route: RouteAssessment; checkp
         </p>
       ) : null}
       {checkpoint.weather_missing_reason ? (
-        <p className="font-medium text-red-800">Missing data: {checkpoint.weather_missing_reason}</p>
+        <p className="font-medium text-red-300">Missing data: {checkpoint.weather_missing_reason}</p>
       ) : null}
     </div>
   )
@@ -105,7 +105,7 @@ export function MapView({
   const others = routes.filter((r) => r.id !== selectedId)
 
   return (
-    <div className="relative h-full min-h-[22rem] w-full overflow-hidden rounded-lg border border-slate-300 bg-slate-200">
+    <div className="relative h-full min-h-[22rem] w-full overflow-hidden bg-line">
       <MapContainer
         center={[39.5, -98.35]}
         zoom={4}
@@ -114,9 +114,11 @@ export function MapView({
         className="h-full w-full"
         aria-label="Map of candidate truck routes"
       >
+        {/* Keyless OpenStreetMap tiles, darkened with CSS (see .dark-tiles) to match the dark UI. CARTO's dark tiles now require an API key. */}
         <TileLayer
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          className="dark-tiles"
           maxZoom={19}
         />
         <FitBounds bounds={bounds} fitKey={fitKey} />
@@ -149,7 +151,7 @@ export function MapView({
             {selected.id === recommendedId ? (
               <Polyline positions={paths.get(selected.id)!} pathOptions={{ color: RECOMMENDED_COLOR, weight: 16, opacity: 0.85 }} interactive={false} />
             ) : null}
-            <Polyline positions={paths.get(selected.id)!} pathOptions={{ color: '#ffffff', weight: 10, opacity: 1 }} interactive={false} />
+            <Polyline positions={paths.get(selected.id)!} pathOptions={{ color: '#04141c', weight: 11, opacity: 0.95 }} interactive={false} />
             {segments.map((segment) => {
               const meta = riskMeta(segment.level)
               return (
@@ -180,7 +182,7 @@ export function MapView({
                   }}
                   center={[checkpoint.latitude, checkpoint.longitude]}
                   radius={focused ? 10 : 6}
-                  pathOptions={{ color: '#0f172a', weight: focused ? 3 : 1.5, fillColor: meta.color, fillOpacity: 1 }}
+                  pathOptions={{ color: '#e8f1f5', weight: focused ? 3 : 1.5, fillColor: meta.color, fillOpacity: 1 }}
                   eventHandlers={{ click: () => onCheckpointClick(selected.id, checkpoint.index) }}
                 >
                   <Popup>
@@ -194,20 +196,20 @@ export function MapView({
         ) : null}
 
         {origin ? (
-          <CircleMarker center={origin} radius={8} pathOptions={{ color: '#0f172a', weight: 3, fillColor: '#ffffff', fillOpacity: 1 }}>
+          <CircleMarker center={origin} radius={8} pathOptions={{ color: '#0a141c', weight: 3, fillColor: '#e8f1f5', fillOpacity: 1 }}>
             <Tooltip permanent direction="top" offset={[0, -8]}>Origin</Tooltip>
           </CircleMarker>
         ) : null}
         {destination ? (
-          <CircleMarker center={destination} radius={8} pathOptions={{ color: '#0f172a', weight: 3, fillColor: '#0f172a', fillOpacity: 1 }}>
+          <CircleMarker center={destination} radius={8} pathOptions={{ color: '#0a141c', weight: 3, fillColor: '#40e0d0', fillOpacity: 1 }}>
             <Tooltip permanent direction="top" offset={[0, -8]}>Destination</Tooltip>
           </CircleMarker>
         ) : null}
       </MapContainer>
 
       {loading ? (
-        <div className="pointer-events-none absolute inset-0 z-[1000] flex items-start justify-center bg-white/50 pt-6">
-          <p role="status" className="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-medium text-white shadow">
+        <div className="pointer-events-none absolute inset-0 z-[1000] flex items-start justify-center bg-canvas/60 pt-6">
+          <p role="status" className="rounded-full border border-line-strong bg-canvas px-4 py-1.5 text-sm font-medium text-ink shadow">
             Assessing routes and weather…
           </p>
         </div>

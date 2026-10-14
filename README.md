@@ -392,33 +392,47 @@ npm run lint
 npm test             # Vitest + Testing Library (no network, no API keys)
 ```
 
-### What the dashboard does
-- **Form:** origin and destination as latitude/longitude (the API accepts coordinates, not addresses, and no geocoder is configured), departure
-  date-time in the browser's time zone (sent with its UTC offset), load in pounds, and 10/25/50-mile checkpoint spacing, with inline validation
-  that mirrors the backend rules. Three quick-fill trips are provided.
-- **Results:** every candidate route with rank, recommended badge (only when the backend recommends a route), distance, drive time, arrival in
-  local time, estimated miles at Low/Moderate/High/Severe/No Travel/Unknown, average score, weather coverage, eligibility and the ranking
-  explanation. The four recommendation statuses are shown distinctly (`recommended`, `recommended_incomplete_weather`, `no_safe_route`,
-  `insufficient_weather_data`) using the backend's own explanation text. Missing weather is shown as "No data" with the backend's reason, never as 0
-  or as safe. Risk levels use text and a shape glyph as well as colour.
-- **Map:** OpenStreetMap tiles (no key; see OSM's tile usage policy before heavy or production use). All candidate routes are drawn from the GeoJSON
-  geometry (`[longitude, latitude]`, converted for Leaflet); click a line or a card to select one. A blue halo marks the recommended route and
-  appears only when one exists. The selected route is drawn as a **risk corridor**: one coloured stretch per checkpoint (the same stretches the
-  backend uses for risk miles), colourable by combined risk, wind, rain or snow, plus checkpoint markers with popups (mile, ETA, readings with units,
-  hazard levels, load rule, missing-data reason). The table below lists every checkpoint, can filter to problem points, and locates a row on the map.
-- **Forecast slider (0-48 h):** when a trip is submitted the app makes **one** request to the batch endpoint (below) for a bounded set of
-  departures, every 6 hours from the entered departure (0, 6, ..., 48 h, nine in all). The server plans the routes once and fetches the weather once, so moving the slider to
-  any of those offsets costs no further request. Other positions are assessed on release (debounced) as a batch of one, reusing the server's cached routes.
-  Filled marks on the slider show exactly which departures have a real assessment; failed ones are marked and can be retried individually, and results
-  older than 30 minutes are flagged and re-requested rather than shown as current. Nothing is interpolated or estimated in the browser. The "heatmap" is
-  the risk corridor above: weather exists only at sampled checkpoints, so there is no interpolated field between them.
+### Pages
+
+The app has two pages, switched from the header (hash routes `#/` and `#/checkpoints`, so the browser's back button works and there is no router dependency).
+
+**Route planner** keeps the decision in one place:
+- **Trip details:** a *Quick trip* dropdown (or custom coordinates; the API takes lat/lon, not addresses, and no geocoder is configured), origin and destination with
+  place names for the quick trips, departure date and time in the browser's time zone (sent with its UTC offset), and load weight in pounds with inline validation that
+  mirrors the backend rules. **Advanced settings** (collapsed) holds the 10/25/50-mile checkpoint spacing.
+- **Route overview:** a large map with a segmented selector (combined risk, wind, rain, snow), a trip chip, all candidate routes from the GeoJSON (`[longitude, latitude]`
+  converted for Leaflet), click-to-select, a blue halo on the recommended route (only when one exists), a risk-coloured corridor for the selected route, and checkpoint popups.
+- **Recommendation:** one line stating the backend's status and explanation, the route's miles, time and arrival, and an honest time trade-off versus the fastest candidate.
+  The four statuses (`recommended`, `recommended_incomplete_weather`, `no_safe_route`, `insufficient_weather_data`) are shown distinctly. Missing weather is "No data", never 0 and never safe.
+- **Compare routes:** compact cards with big distance and drive time, worst-checkpoint risk, weather coverage and eligibility. *Risk details* (collapsed) holds arrival, average score,
+  estimated miles by risk level and the ranking explanation.
+- **Explore departure times:** the forecast slider (see below) as a row of tabs showing the recommended route for each departure.
+
+**Checkpoints** holds the detail so the planner stays focused:
+- Every sampled point of the selected route (switch routes on the page): mile marker, estimated arrival (local time), wind, gusts, rain, snow with units, hazard levels, combined risk,
+  load rule, and the reason when weather is missing. **Above low risk only** filters long routes; **Export** downloads a CSV of the route (missing values are left empty, never 0).
+- Choosing a mile marker returns to the planner with that checkpoint open on the map. On phones the table becomes stacked cards.
+
+**Forecast slider (0-48 h):** when a trip is submitted the app makes **one** request to the batch endpoint (below) for a bounded set of departures, every 6 hours from the entered
+departure (0, 6, ..., 48 h, nine in all). The server plans the routes once and fetches the weather once, so moving to any of those offsets costs no further request. Other positions are
+assessed on release (debounced) as a batch of one, reusing the server's cached routes. Filled marks on the slider show exactly which departures have a real assessment; failed ones are
+marked and can be retried individually, and results older than 30 minutes are flagged and re-requested rather than shown as current. Nothing is interpolated or estimated in the browser.
+The "heatmap" is the risk corridor above: weather exists only at sampled checkpoints, so there is no interpolated field between them.
+
+### Design
+
+A clean, quiet dark-teal product UI: a flat near-black canvas, one mint accent, subtle 1px borders, generous spacing, DM Sans, small uppercase labels above large numbers, and a
+prominent map. Tokens live in `frontend/src/index.css` (`@theme`, plus `.card`, `.input`, `.btn-primary`, `.seg`), the risk palette in `frontend/src/lib/risk.ts`. Every text/background pair meets
+WCAG AA (4.5:1); an automated audit of the rendered pages (planner, checkpoints, desktop and phone) found 0 failures. Risk is always shown with text and a shape glyph as well as colour.
+The basemap is keyless OpenStreetMap darkened with a CSS filter (CARTO's dark tiles now require an API key); heavy use needs a proper tile provider.
+It is responsive: the planner stacks on tablets and phones, the departure tabs reflow to 3 or 5 columns, and checkpoints become cards below 768 px.
 
 ### Frontend limitations
 - Only the nine prefetched departures are assessed up front; any other slider position is one more (cheap) request. The batch payload is large
   (about 1.5 MB, 270 KB gzipped, for nine departures) because every departure carries its checkpoints.
 - No geocoding: coordinates only. Times are shown in the viewer's local time zone, which may differ from the trip's.
 - The risk corridor colours the road around each sampled checkpoint; hazards between checkpoints can be missed (see Method limits above).
-- Leaflet is not rendered in the jsdom tests, so map drawing is covered by the pure geometry tests plus a manual browser run.
+- Leaflet is not rendered in the jsdom tests, so map drawing is covered by the pure geometry tests plus real-browser runs (desktop and phone) against the live API.
 
 ### `POST /api/v1/routes/assess-batch/` (several departures, one trip)
 

@@ -9,17 +9,18 @@ export interface RiskMeta {
   fg: string
 }
 
-export const RECOMMENDED_COLOR = '#1d4ed8'
+export const RECOMMENDED_COLOR = '#60a5fa'
 
 export const RISK_ORDER: readonly RiskKey[] = ['low', 'moderate', 'high', 'severe', 'no_travel']
 
+// Dark-theme palette. `color` is for map lines/markers (>= 3:1 on the dark map); bg/fg are badge pairs (>= 4.5:1).
 const META: Record<RiskKey | 'unknown', RiskMeta> = {
-  low: { key: 'low', label: 'Low', symbol: '●', color: '#2e7d32', bg: '#e3f4e6', fg: '#14532d' },
-  moderate: { key: 'moderate', label: 'Moderate', symbol: '▲', color: '#f2b100', bg: '#fff3c4', fg: '#5c4300' },
-  high: { key: 'high', label: 'High', symbol: '◆', color: '#ef6c00', bg: '#ffe5cc', fg: '#7a2e00' },
-  severe: { key: 'severe', label: 'Severe', symbol: '■', color: '#c62828', bg: '#fddede', fg: '#7f1d1d' },
-  no_travel: { key: 'no_travel', label: 'No Travel', symbol: '✕', color: '#4a148c', bg: '#ece3f7', fg: '#311b92' },
-  unknown: { key: 'unknown', label: 'Unknown', symbol: '?', color: '#78909c', bg: '#e8edf0', fg: '#26343c' },
+  low: { key: 'low', label: 'Low', symbol: '●', color: '#34c38f', bg: '#0f3b2a', fg: '#86efac' },
+  moderate: { key: 'moderate', label: 'Moderate', symbol: '▲', color: '#f2c230', bg: '#3d3210', fg: '#fde68a' },
+  high: { key: 'high', label: 'High', symbol: '◆', color: '#f0883e', bg: '#45250c', fg: '#fdba74' },
+  severe: { key: 'severe', label: 'Severe', symbol: '■', color: '#ef4444', bg: '#4a1717', fg: '#fca5a5' },
+  no_travel: { key: 'no_travel', label: 'No Travel', symbol: '✕', color: '#a855f7', bg: '#2e1a52', fg: '#d8b4fe' },
+  unknown: { key: 'unknown', label: 'Unknown', symbol: '?', color: '#7b8b97', bg: '#26323b', fg: '#cbd5df' },
 }
 
 export function riskMeta(level: RiskKey | null | undefined): RiskMeta {

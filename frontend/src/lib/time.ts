@@ -63,6 +63,14 @@ export function formatDuration(seconds: number): string {
   return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`
 }
 
+/** 16 h 17 min -> "16h 17m", for big card numbers. */
+export function compactDuration(seconds: number): string {
+  const totalMinutes = Math.round(seconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
+}
+
 export function timeZoneLabel(now: Date = new Date()): string {
   const offset = localOffsetMinutes(now)
   const sign = offset < 0 ? '-' : '+'
