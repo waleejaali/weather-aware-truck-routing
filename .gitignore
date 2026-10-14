@@ -238,3 +238,6 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# The Python-template "lib/" rule above must not hide the frontend's source modules.
+!frontend/src/lib/

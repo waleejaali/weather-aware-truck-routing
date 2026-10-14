@@ -27,8 +27,9 @@ from routing.types import Coordinate
 from weather.errors import WeatherProviderError, WeatherRateLimitError, WeatherTimeoutError
 from weather.providers import get_weather_provider
 
-from .presenters import present_result
-from .serializers import AssessRequestSerializer
+from .batch import assess_trip_batch
+from .presenters import present_batch, present_result
+from .serializers import AssessRequestSerializer, BatchRequestSerializer
 from .services import assess_trip
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,53 @@ class AssessRoutesView(APIView):
             logger.exception("Unexpected error while assessing routes")
             return error_response("internal_error", "An unexpected error occurred.", 500)
         return Response(present_result(result, params))
+
+
+class AssessBatchView(APIView):
+    """POST /api/v1/routes/assess-batch/ - one trip, several departures, routes and weather fetched once.
+
+    Same validation rules, units, risk rules and statuses as the single endpoint; results are ordered like the
+    request and identified by departure. Failures that affect every departure (routing, shared weather fetch)
+    return the same errors as the single endpoint; a failure confined to one departure is reported on it.
+    """
+
+    def post(self, request):
+        data = request.data
+        serializer = BatchRequestSerializer(data=data)
+        if not serializer.is_valid():
+            return error_response(
+                "validation_error", "The request is invalid.", 400, fields=flatten_errors(serializer.errors)
+            )
+        v = serializer.validated_data
+        params = {
+            "origin": dict(v["origin"]),
+            "destination": dict(v["destination"]),
+            "load_lb": v["load_lb"],
+            "interval_miles": v["checkpoint_interval_miles"],
+        }
+        try:
+            result = assess_trip_batch(
+                Coordinate(v["origin"]["latitude"], v["origin"]["longitude"]),
+                Coordinate(v["destination"]["latitude"], v["destination"]["longitude"]),
+                departures=v["departure_datetimes"],
+                departure_inputs=data["departure_datetimes"],
+                load_lb=params["load_lb"],
+                interval_miles=params["interval_miles"],
+                routing_provider=get_routing_provider(),
+                weather_provider=get_weather_provider(),
+                now=utcnow(),
+                wind_metric=settings.WEATHER_WIND_METRIC,
+            )
+        except RoutingError as exc:
+            return _routing_failure(exc)
+        except WeatherProviderError as exc:
+            return _weather_failure(exc)
+        except Exception:
+            logger.exception("Unexpected error while assessing a batch of departures")
+            return error_response("internal_error", "An unexpected error occurred.", 500)
+        if not any(o.assessment is not None for o in result.outcomes):
+            return error_response("assessment_failed", "None of the requested departures could be assessed.", 502)
+        return Response(present_batch(result, params))
 
 
 def _routing_failure(exc: RoutingError) -> Response:

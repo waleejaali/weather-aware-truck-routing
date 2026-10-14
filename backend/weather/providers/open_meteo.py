@@ -65,6 +65,7 @@ class OpenMeteoProvider(WeatherProvider):
         self._timeout_s = timeout_s
         self._max_locations = max_locations_per_request
         self._session = session or requests.Session()
+        self.request_count = 0  # HTTP requests sent by this instance
 
     def available_window(self, now: datetime) -> tuple[datetime, datetime]:
         today = now.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -107,6 +108,7 @@ class OpenMeteoProvider(WeatherProvider):
             "start_date": start_date,
             "end_date": end_date,
         }
+        self.request_count += 1
         try:
             response = self._session.get(f"{self._base_url}/v1/forecast", params=params, timeout=self._timeout_s)
         except requests.Timeout as exc:

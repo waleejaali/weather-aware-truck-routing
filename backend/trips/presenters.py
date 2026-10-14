@@ -18,6 +18,7 @@ from trips.assessment import (
     RouteAssessment,
     TripAssessment,
 )
+from trips.batch import BatchResult, DepartureOutcome
 from trips.services import TripResult
 
 API_VERSION = "v1"
@@ -91,9 +92,9 @@ def present_result(result: TripResult, params: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def _route(r: RouteAssessment, ordered: tuple[RouteAssessment, ...]) -> dict[str, Any]:
+def _route(r: RouteAssessment, ordered: tuple[RouteAssessment, ...], *, include_geometry: bool = True) -> dict[str, Any]:
     s = r.summary
-    return {
+    data = {
         "id": _route_id(r),
         "source": r.route.strategy,
         "rank": r.rank,
@@ -105,10 +106,7 @@ def _route(r: RouteAssessment, ordered: tuple[RouteAssessment, ...]) -> dict[str
         "duration_text": _duration_text(r.route.duration_s),
         "departure_datetime": _iso(r.departure),
         "arrival_datetime": _iso(r.arrival),
-        "geometry": {
-            "type": "LineString",
-            "coordinates": [[round(p.lon, 5), round(p.lat, 5)] for p in r.route.points],
-        },
+        "geometry": _geometry(r),
         "risk_summary": {
             "miles": {
                 **{_LEVEL_KEYS[level]: round(s.miles(level), 2) for level in RiskLevel},
@@ -132,6 +130,16 @@ def _route(r: RouteAssessment, ordered: tuple[RouteAssessment, ...]) -> dict[str
             "explanation": _ranking_explanation(r, ordered),
         },
         "checkpoints": [_checkpoint(c) for c in r.checkpoints],
+    }
+    if not include_geometry:
+        del data["geometry"]
+    return data
+
+
+def _geometry(r: RouteAssessment) -> dict[str, Any]:
+    return {
+        "type": "LineString",
+        "coordinates": [[round(p.lon, 5), round(p.lat, 5)] for p in r.route.points],
     }
 
 
@@ -245,3 +253,95 @@ def _duration_text(seconds: float) -> str:
     minutes = round(seconds / 60)
     hours, minutes = divmod(minutes, 60)
     return f"{hours} h {minutes} min" if hours else f"{minutes} min"
+
+
+# -- batch response ---------------------------------------------------------------------------------
+
+
+def present_batch(result: BatchResult, params: dict[str, Any]) -> dict[str, Any]:
+    """Response for POST /api/v1/routes/assess-batch/.
+
+    Route geometry is identical for every departure, so it is sent once in `routes` and each result's
+    routes refer to it by id. Everything else per route is exactly what the single endpoint returns.
+    """
+    plan = result.plan
+    first = next((o.assessment for o in result.outcomes if o.assessment is not None), None)
+    assert first is not None  # the view rejects batches where nothing could be assessed
+    return {
+        "api_version": API_VERSION,
+        "generated_at": _iso(result.generated_at),
+        "request": {
+            "origin": params["origin"],
+            "destination": params["destination"],
+            "load_lb": params["load_lb"],
+            "checkpoint_interval_miles": params["interval_miles"],
+            "departure_datetimes": [_iso(o.departure) for o in result.outcomes],
+        },
+        "units": UNITS,
+        "risk_levels": RISK_LEGEND,
+        "method": {
+            "wind_metric": first.wind_metric,
+            "checkpoint_interval_miles": first.interval_miles,
+            "min_weather_coverage_percent": round(first.min_weather_coverage * 100),
+            "assumptions": list(first.assumptions),
+            "routing": {
+                "provider": plan.provider,
+                "profile": plan.profile,
+                "status": plan.status,
+                "requested_routes": plan.requested_count,
+                "returned_routes": len(plan.routes),
+                "notes": list(plan.notes),
+            },
+            "weather": {
+                "provider": result.weather_provider_name,
+                "attribution": {
+                    "text": first.attribution.text,
+                    "url": first.attribution.url,
+                    "license": first.attribution.license,
+                    "license_url": first.attribution.license_url,
+                },
+            },
+        },
+        "diagnostics": {
+            "route_cache": "hit" if result.route_cache_hit else "miss",
+            "routing_provider_requests": result.routing_requests,
+            "weather_provider_requests": result.weather_requests,
+        },
+        "routes": [_shared_route(i, route) for i, route in enumerate(plan.routes)],
+        "results": [_outcome(i, o) for i, o in enumerate(result.outcomes)],
+    }
+
+
+def _shared_route(index: int, route) -> dict[str, Any]:
+    return {
+        "id": f"route-{index + 1}",
+        "source": route.strategy,
+        "distance_miles": round(route.distance_m / METERS_PER_MILE, 1),
+        "duration_seconds": round(route.duration_s),
+        "geometry": {
+            "type": "LineString",
+            "coordinates": [[round(p.lon, 5), round(p.lat, 5)] for p in route.points],
+        },
+    }
+
+
+def _outcome(index: int, outcome: DepartureOutcome) -> dict[str, Any]:
+    base = {
+        "index": index,
+        "departure_datetime": _iso(outcome.departure),
+        "departure_datetime_input": outcome.departure_input,
+    }
+    trip = outcome.assessment
+    if trip is None:
+        return {**base, "ok": False, "error": {"code": outcome.error_code, "message": outcome.error_message}}
+    return {
+        **base,
+        "ok": True,
+        "recommendation": {
+            "status": trip.status,
+            "recommended_route_id": _route_id(trip.recommended) if trip.recommended else None,
+            "explanation": _recommendation_text(trip),
+        },
+        "notes": list(trip.notes),
+        "routes": [_route(r, trip.routes, include_geometry=False) for r in trip.routes],
+    }

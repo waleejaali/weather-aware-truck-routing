@@ -2,7 +2,7 @@
 
 Compare three driving routes for a truck based on weather along the route, load weight, estimated checkpoint arrival times, and travel duration.
 
-> **Status:** backend routing, weather, risk and recommendation logic with a REST API (`POST /api/v1/routes/assess/`), tests and live-check commands. No map UI yet.
+> **Status:** backend routing, weather, risk and recommendation logic with a REST API (`POST /api/v1/routes/assess/`), tests and live-check commands, and a React dashboard with map, checkpoint table and forecast slider.
 
 ## Stack
 
@@ -365,3 +365,128 @@ is merely unavailable for some checkpoints (outside the forecast range, missing 
 `GET /api/health/` is unchanged and does not call any external service.
 
 Tests for this contract are in `backend/trips/tests/test_api.py` (fake providers; no network or keys).
+
+## Frontend (React dashboard)
+
+A single-page dashboard in `frontend/` (React 19, TypeScript, Vite, Tailwind CSS v4, Leaflet via React Leaflet, axios) that calls
+`POST /api/v1/routes/assess/` and shows the routes, risk, checkpoints and map.
+
+### Configure and run
+
+| Variable | Where | Purpose |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | repo-root `.env` (read by Vite via `envDir: '..'`) | Backend base URL, no trailing path. Defaults to `http://localhost:8000` |
+| `ROUTE_CACHE_TTL_SECONDS` | repo-root `.env` (backend) | How long planned routes are reused between batch requests (default 900; 0 disables) |
+| `FRONTEND_URL` | repo-root `.env` (backend) | The frontend origin(s) the backend's CORS allows; must include where the app is served from, e.g. `http://localhost:5173` |
+
+`VITE_*` values are baked into the bundle at build time and are visible to anyone using the app, so they must never hold secrets.
+The ORS key stays in the backend; the browser only talks to your Django API. For a deployment, build with `VITE_API_BASE_URL` set to
+the deployed API's URL and add the deployed frontend's origin to the backend's `FRONTEND_URL`.
+
+```powershell
+cd frontend
+npm install
+npm run dev          # http://localhost:5173 (start the backend too: python manage.py runserver)
+npm run build        # type-check + production build into frontend/dist
+npm run lint
+npm test             # Vitest + Testing Library (no network, no API keys)
+```
+
+### What the dashboard does
+- **Form:** origin and destination as latitude/longitude (the API accepts coordinates, not addresses, and no geocoder is configured), departure
+  date-time in the browser's time zone (sent with its UTC offset), load in pounds, and 10/25/50-mile checkpoint spacing, with inline validation
+  that mirrors the backend rules. Three quick-fill trips are provided.
+- **Results:** every candidate route with rank, recommended badge (only when the backend recommends a route), distance, drive time, arrival in
+  local time, estimated miles at Low/Moderate/High/Severe/No Travel/Unknown, average score, weather coverage, eligibility and the ranking
+  explanation. The four recommendation statuses are shown distinctly (`recommended`, `recommended_incomplete_weather`, `no_safe_route`,
+  `insufficient_weather_data`) using the backend's own explanation text. Missing weather is shown as "No data" with the backend's reason, never as 0
+  or as safe. Risk levels use text and a shape glyph as well as colour.
+- **Map:** OpenStreetMap tiles (no key; see OSM's tile usage policy before heavy or production use). All candidate routes are drawn from the GeoJSON
+  geometry (`[longitude, latitude]`, converted for Leaflet); click a line or a card to select one. A blue halo marks the recommended route and
+  appears only when one exists. The selected route is drawn as a **risk corridor**: one coloured stretch per checkpoint (the same stretches the
+  backend uses for risk miles), colourable by combined risk, wind, rain or snow, plus checkpoint markers with popups (mile, ETA, readings with units,
+  hazard levels, load rule, missing-data reason). The table below lists every checkpoint, can filter to problem points, and locates a row on the map.
+- **Forecast slider (0-48 h):** when a trip is submitted the app makes **one** request to the batch endpoint (below) for a bounded set of
+  departures, every 6 hours from the entered departure (0, 6, ..., 48 h, nine in all). The server plans the routes once and fetches the weather once, so moving the slider to
+  any of those offsets costs no further request. Other positions are assessed on release (debounced) as a batch of one, reusing the server's cached routes.
+  Filled marks on the slider show exactly which departures have a real assessment; failed ones are marked and can be retried individually, and results
+  older than 30 minutes are flagged and re-requested rather than shown as current. Nothing is interpolated or estimated in the browser. The "heatmap" is
+  the risk corridor above: weather exists only at sampled checkpoints, so there is no interpolated field between them.
+
+### Frontend limitations
+- Only the nine prefetched departures are assessed up front; any other slider position is one more (cheap) request. The batch payload is large
+  (about 1.5 MB, 270 KB gzipped, for nine departures) because every departure carries its checkpoints.
+- No geocoding: coordinates only. Times are shown in the viewer's local time zone, which may differ from the trip's.
+- The risk corridor colours the road around each sampled checkpoint; hazards between checkpoints can be missed (see Method limits above).
+- Leaflet is not rendered in the jsdom tests, so map drawing is covered by the pure geometry tests plus a manual browser run.
+
+### `POST /api/v1/routes/assess-batch/` (several departures, one trip)
+
+Assesses the **same trip at several departure times** while planning the routes and fetching the weather once. It exists for the forecast slider;
+`POST /api/v1/routes/assess/` is unchanged and still the endpoint for a single departure.
+
+```json
+{
+  "origin": {"latitude": 34.0522, "longitude": -118.2437},
+  "destination": {"latitude": 32.7767, "longitude": -96.7970},
+  "departure_datetimes": ["2026-10-14T08:00:00-05:00", "2026-10-14T14:00:00-05:00", "2026-10-14T20:00:00-05:00"],
+  "load_lb": 42000,
+  "checkpoint_interval_miles": 25
+}
+```
+
+Validation is the same as the single endpoint, plus: `departure_datetimes` is a non-empty list of **at most 12** timezone-aware, distinct (compared in UTC)
+date-times; errors are keyed like `departure_datetimes.1`.
+
+```json
+{
+  "api_version": "v1",
+  "generated_at": "2026-10-12T18:35:00Z",
+  "request": {"origin": {}, "destination": {}, "load_lb": 42000, "checkpoint_interval_miles": 25,
+              "departure_datetimes": ["2026-10-14T13:00:00Z", "..."]},
+  "units": {}, "risk_levels": [], "method": {"wind_metric": "sustained", "assumptions": [], "routing": {}, "weather": {}},
+  "diagnostics": {"route_cache": "miss", "routing_provider_requests": 3, "weather_provider_requests": 4},
+  "routes": [{"id": "route-1", "source": "baseline", "distance_miles": 1430.1, "duration_seconds": 119340, "geometry": {}}],
+  "results": [
+    {"index": 0, "departure_datetime": "2026-10-14T13:00:00Z", "departure_datetime_input": "2026-10-14T08:00:00-05:00", "ok": true,
+     "recommendation": {"status": "recommended", "recommended_route_id": "route-1", "explanation": "..."},
+     "notes": [], "routes": [{"id": "route-1", "rank": 1, "eligible": true, "risk_summary": {}, "checkpoints": []}]},
+    {"index": 1, "departure_datetime": "...", "departure_datetime_input": "...", "ok": false,
+     "error": {"code": "assessment_failed", "message": "This departure could not be assessed."}}
+  ]
+}
+```
+
+- `routes` holds each route's geometry **once** (GeoJSON `[longitude, latitude]`); each result's routes refer to it by `id` and are otherwise
+  exactly what the single endpoint returns for that departure (same checkpoints, ETAs, weather, risk, coverage, eligibility, ranking and
+  recommendation status), verified by tests that compare batch results with single-endpoint responses and by a live run.
+- `results` come back in request order and identify their departure (`index`, `departure_datetime`, `departure_datetime_input`).
+- **Failures:** routing failures or a failure of the shared weather fetch fail the whole request with the same errors as the single endpoint
+  (422/502/503/504). A failure confined to one departure is reported on that result (`ok: false`) while the others are returned; if no
+  departure can be assessed the request fails with 502 `assessment_failed`. Missing weather is reported per checkpoint exactly as before and
+  never as safe.
+- `diagnostics` states whether the planned routes came from the cache and how many provider HTTP requests this call made.
+
+**Why reuse is safe.** The routes depend only on origin, destination and the routing provider's configuration: the OpenRouteService request
+carries coordinates, snap radii and a preference, with no departure time, traffic or truck weight. So geometry and duration do not change
+with departure, load or checkpoint interval. If routing ever starts using any of those, add them to `route_cache_key` in `backend/trips/batch.py`
+and revisit the reuse. Weather is shared too: checkpoint coordinates are identical for every departure, so one Open-Meteo fetch over the union
+time window serves all of them, and each departure is still assessed by the unchanged `assess_routes()`.
+
+**Route cache.** Planned routes are kept in a small per-process in-memory cache (`CACHES["routes"]`, at most 20 entries) for
+`ROUTE_CACHE_TTL_SECONDS` (default 900; `0` disables it). The key is a hash of origin, destination (6 decimals), routing provider, profile and
+planner configuration. Only successful plans are stored; provider failures are never cached, and a broken cache backend falls back to planning
+every time. The cache holds no user data. With several server processes each has its own cache (a cold process just plans again). The
+single-departure endpoint does not use the cache.
+
+**Measured effect** (real providers, LA to Dallas, 25-mile checkpoints; "submit, then move the slider to +6, +12, +24, +36 and +48 h"):
+
+| | routing requests | weather requests |
+| --- | --- | --- |
+| before: 6 single-departure requests (each re-plans) | 18 | 24 |
+| after: 1 batch of 9 departures (later offsets cached in the browser) | 3 | 4 |
+| after, then a new offset such as +7 h | +0 (routes cached) | +4 |
+
+Open-Meteo's free limit (600 calls/minute) appears to count each location, and one assessment sends about 175 locations; the old
+approach would have sent about 1,050 locations for that interaction and the batch about 175. Bursts of several assessments within a minute can still
+return a 503 `weather_rate_limited`, which is retryable.

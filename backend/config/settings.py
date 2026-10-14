@@ -76,6 +76,18 @@ WEATHER_TIMEOUT_SECONDS = float(os.environ.get("WEATHER_TIMEOUT_SECONDS", "20"))
 # Which wind value drives risk: "sustained" (wind_speed_10m) or "gust" (wind_gusts_10m).
 WEATHER_WIND_METRIC = os.environ.get("WEATHER_WIND_METRIC", "sustained")
 
+# Planned routes (geometry) are cached briefly because they depend only on origin, destination and the routing
+# provider's configuration. Per-process memory, no database; entries are large, so keep the count small.
+ROUTE_CACHE_TTL_SECONDS = int(os.environ.get("ROUTE_CACHE_TTL_SECONDS", "900"))  # 0 disables the cache
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    "routes": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "planned-routes",
+        "OPTIONS": {"MAX_ENTRIES": 20},
+    },
+}
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_TZ = True

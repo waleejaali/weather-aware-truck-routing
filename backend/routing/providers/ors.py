@@ -54,6 +54,7 @@ class OpenRouteServiceProvider(RoutingProvider):
         self.profile = profile
         self._timeout_s = timeout_s
         self._session = session or requests.Session()
+        self.request_count = 0  # HTTP requests sent by this instance
 
     def directions(self, waypoints: Sequence[Coordinate], *, preference: str = "recommended") -> Route:
         body = self._body(waypoints)
@@ -97,6 +98,7 @@ class OpenRouteServiceProvider(RoutingProvider):
             "Content-Type": "application/json",
             "Accept": "application/geo+json, application/json",
         }
+        self.request_count += 1
         try:
             response = self._session.post(url, json=body, headers=headers, timeout=self._timeout_s)
         except requests.Timeout as exc:

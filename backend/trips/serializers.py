@@ -9,6 +9,7 @@ from routing.geometry import haversine_m
 from routing.types import Coordinate
 from trips.assessment import ALLOWED_INTERVALS_MILES
 
+MAX_BATCH_DEPARTURES = 12  # departures per batch request
 MAX_LOAD_LB = 150_000  # well above the 80,000 lb US gross vehicle limit, below absurd values
 MIN_TRIP_SEPARATION_M = 100.0
 
@@ -71,10 +72,11 @@ class PointSerializer(serializers.Serializer):
         return value
 
 
-class AssessRequestSerializer(serializers.Serializer):
+class TripFieldsSerializer(serializers.Serializer):
+    """Fields and rules shared by the single-departure and batch requests."""
+
     origin = PointSerializer()
     destination = PointSerializer()
-    departure_datetime = AwareDateTimeField()
     load_lb = StrictNumberField()
     checkpoint_interval_miles = StrictNumberField()
 
@@ -102,3 +104,18 @@ class AssessRequestSerializer(serializers.Serializer):
                 {"destination": ["Destination must be at least 100 m from the origin."]}
             )
         return attrs
+
+
+class AssessRequestSerializer(TripFieldsSerializer):
+    departure_datetime = AwareDateTimeField()
+
+
+class BatchRequestSerializer(TripFieldsSerializer):
+    departure_datetimes = serializers.ListField(
+        child=AwareDateTimeField(), allow_empty=False, min_length=1, max_length=MAX_BATCH_DEPARTURES
+    )
+
+    def validate_departure_datetimes(self, values):
+        if len(set(values)) != len(values):
+            raise serializers.ValidationError("Departures must be distinct (compared in UTC).")
+        return values

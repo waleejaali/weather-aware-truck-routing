@@ -15,6 +15,10 @@ class FakeRoutingProvider(RoutingProvider):
         self.error = error
         self.calls = []
 
+    @property
+    def request_count(self):
+        return len(self.calls)
+
     def alternative_routes(self, origin, destination, target_count):
         raise AssertionError("long test trips must not request provider alternatives")
 

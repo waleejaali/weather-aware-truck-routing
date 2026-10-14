@@ -34,6 +34,10 @@ class FakeWeatherProvider(WeatherProvider):
     def __init__(self, weather_fn=lambda coordinate, hour: CALM, error=None):
         self.weather_fn, self.error, self.calls = weather_fn, error, []
 
+    @property
+    def request_count(self):
+        return len(self.calls)
+
     def available_window(self, now):
         today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         return today - timedelta(days=92), today + timedelta(days=16)
