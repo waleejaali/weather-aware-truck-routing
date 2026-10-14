@@ -515,3 +515,14 @@ single-departure endpoint does not use the cache.
 Open-Meteo's free limit (600 calls/minute) appears to count each location, and one assessment sends about 175 locations; the old
 approach would have sent about 1,050 locations for that interaction and the batch about 175. Bursts of several assessments within a minute can still
 return a 503 `weather_rate_limited`, which is retryable.
+
+## Deploying on Vercel
+
+Two Vercel projects from the same repository (Hobby plan is enough):
+
+1. **API**: Add New Project, import the repo, set *Root Directory* to `backend`. Vercel detects Django from `manage.py` and `WSGI_APPLICATION`; `backend/vercel.json` raises the function limit to 120 s (assessments can take 5 to 40 s) and `backend/.python-version` pins Python 3.12.
+   Environment variables: `DJANGO_DEBUG=false`, `DJANGO_SECRET_KEY` (any long random string), `ORS_API_KEY`, `WEATHER_TIMEOUT_SECONDS=60`, `FRONTEND_URL` (the frontend's URL, set after step 2).
+   Vercel's own hostnames are allowed automatically; add a custom domain to `DJANGO_ALLOWED_HOSTS`.
+2. **Frontend**: second project, *Root Directory* `frontend` (Vite is auto-detected). Set `VITE_API_BASE_URL` to the API project's URL (no trailing slash), deploy, then put the frontend URL in the API's `FRONTEND_URL` and redeploy the API.
+
+Caveats: the route cache is per function instance, so it helps repeat requests but is not shared; the first request after idle has a cold start; CORS allows only `FRONTEND_URL`, so preview deployments need their URL added (comma separated).

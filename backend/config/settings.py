@@ -24,6 +24,13 @@ if not SECRET_KEY:
         raise RuntimeError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is not true.")
 
 ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+# Vercel injects this deployment's own hostnames, so the API answers on its generated URLs
+# without listing them by hand. A custom domain still goes in DJANGO_ALLOWED_HOSTS.
+ALLOWED_HOSTS += [
+    host
+    for host in (os.environ.get(name, "") for name in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"))
+    if host
+]
 
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
