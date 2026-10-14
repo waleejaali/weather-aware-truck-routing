@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { CheckpointInterval, ColorBy } from './api/types'
 import { AppHeader } from './components/AppHeader'
 import { CheckpointsPage } from './components/CheckpointsPage'
 import { ForecastSlider, type OffsetSummary } from './components/ForecastSlider'
 import { IconSliders } from './components/icons'
+import { LandingPage } from './components/landing/LandingPage'
 import { PlannerForm } from './components/PlannerForm'
 import { RecommendationBanner } from './components/RecommendationBanner'
 import { RouteCard } from './components/RouteCard'
-import { RouteOverview } from './components/RouteOverview'
 import { EmptyState, ErrorPanel, LoadingState, MethodPanel } from './components/StatePanels'
 import { isStale, statusOf, useAssessment } from './hooks/useAssessment'
 import { useHashRoute } from './hooks/useHashRoute'
@@ -39,6 +39,18 @@ function initialValues(): FormValues {
   }
 }
 
+// The map pulls in Leaflet (the largest dependency). Load it only when someone opens the planner,
+// so the landing page stays light.
+const RouteOverview = lazy(() => import('./components/RouteOverview').then((m) => ({ default: m.RouteOverview })))
+
+function MapFallback() {
+  return (
+    <div role="status" aria-label="Loading map" className="card flex min-h-[26rem] items-center justify-center text-sm text-muted sm:min-h-[34rem]">
+      Loading map…
+    </div>
+  )
+}
+
 const coordText = (lat: number, lon: number) => `${lat.toFixed(2)}, ${lon.toFixed(2)}`
 
 function App() {
@@ -58,7 +70,10 @@ function App() {
   // Each page starts at the top, and the tab title says where you are.
   useEffect(() => {
     window.scrollTo(0, 0)
-    document.title = `${page === 'checkpoints' ? 'Checkpoints' : 'Route planner'} · Weather-Aware Routing`
+    document.title =
+      page === 'home'
+        ? 'Weather-Aware Routing · Truck route intelligence'
+        : `${page === 'checkpoints' ? 'Checkpoints' : 'Route planner'} · Weather-Aware Routing`
   }, [page])
 
   // Coming back from the Checkpoints page to look at a point: bring the map into view.
@@ -158,6 +173,11 @@ function App() {
       </a>
       <AppHeader page={page} onNavigate={navigate} />
 
+      {page === 'home' ? (
+        <main>
+          <LandingPage onNavigate={navigate} />
+        </main>
+      ) : (
       <main className="mx-auto max-w-[96rem] px-4 pb-16 pt-10 sm:px-8">
         {page === 'checkpoints' ? (
           <CheckpointsPage
@@ -202,6 +222,7 @@ function App() {
                 />
               </section>
 
+              <Suspense fallback={<MapFallback />}>
               <RouteOverview
                 routes={data?.routes ?? []}
                 selectedId={selectedId}
@@ -217,6 +238,7 @@ function App() {
                 onSelectRoute={setChosenId}
                 onCheckpointClick={(routeId, index) => setFocus({ routeId, index })}
               />
+              </Suspense>
             </div>
 
             <div className="mt-10 space-y-10">
@@ -299,7 +321,9 @@ function App() {
           </>
         )}
       </main>
+      )}
 
+      {page !== 'home' ? (
       <footer className="mx-auto max-w-[96rem] space-y-1.5 border-t border-line px-4 py-8 text-xs text-faint sm:px-8">
         <p>
           <a className="text-muted underline" href={data?.method.weather.attribution.url ?? 'https://open-meteo.com/'} target="_blank" rel="noreferrer">
@@ -313,6 +337,7 @@ function App() {
         </p>
         <p>Weather-aware truck routing · Recommendations are based on forecast conditions at sampled checkpoints and are not a guarantee of safety.</p>
       </footer>
+      ) : null}
     </div>
   )
 }

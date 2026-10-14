@@ -409,3 +409,27 @@ describe('ForecastSlider (Explore departure times)', () => {
     expect(screen.getByText(/never estimated in your browser/)).toBeInTheDocument()
   })
 })
+
+describe('AppHeader: landing and app variants', () => {
+  it('links the app pages to their own routes, and the brand to the landing page', async () => {
+    const onNavigate = vi.fn()
+    render(<AppHeader page="planner" onNavigate={onNavigate} />)
+    const nav = within(screen.getByRole('navigation', { name: 'Pages' }))
+    expect(nav.getByRole('link', { name: 'Route planner' })).toHaveAttribute('href', '#/planner')
+    expect(nav.getByRole('link', { name: 'Checkpoints' })).toHaveAttribute('href', '#/checkpoints')
+    await userEvent.click(screen.getByRole('link', { name: /Weather-Aware Routing, home/ }))
+    expect(onNavigate).toHaveBeenCalledWith('home')
+  })
+
+  it('on the landing page shows section links and one primary action instead of the app navigation', async () => {
+    const onNavigate = vi.fn()
+    render(<AppHeader page="home" onNavigate={onNavigate} />)
+    expect(screen.queryByRole('navigation', { name: 'Pages' })).not.toBeInTheDocument()
+    const sections = within(screen.getByRole('navigation', { name: 'Sections' }))
+    expect(sections.getByRole('link', { name: 'How it works' })).toHaveAttribute('href', '#how-it-works')
+    expect(sections.getByRole('link', { name: 'Principles' })).toHaveAttribute('href', '#principles')
+    expect(sections.getByRole('link', { name: 'Risk rules' })).toHaveAttribute('href', '#risk-rules')
+    await userEvent.click(screen.getByRole('link', { name: /Open planner/ }))
+    expect(onNavigate).toHaveBeenCalledWith('planner')
+  })
+})

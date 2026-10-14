@@ -46,6 +46,7 @@ const pagesNav = () => within(screen.getByRole('navigation', { name: 'Pages' }))
 
 beforeEach(() => {
   batch.mockReset()
+  window.location.hash = '#/planner' // most tests exercise the app itself; the landing page has its own describe
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -53,13 +54,14 @@ afterEach(() => {
 })
 
 describe('App: planning a trip', () => {
-  it('starts on the route planner with an empty comparison and an enabled Assess button', () => {
+  it('starts on the route planner with an empty comparison and an enabled Assess button', async () => {
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Plan a safer journey.' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Trip details' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Your route comparison will appear here' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Assess routes' })).toBeEnabled()
-    expect(screen.getByTestId('map')).toHaveAttribute('data-routes', '0')
+    // The map is loaded on demand, so it appears a moment after the page.
+    expect(await screen.findByTestId('map')).toHaveAttribute('data-routes', '0')
     expect(screen.getByText(/Live forecast · Open-Meteo/)).toBeInTheDocument()
   })
 
@@ -223,7 +225,7 @@ describe('App: pages', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Locate mile 50 on map' }))
     expect(await screen.findByRole('heading', { name: 'Plan a safer journey.' })).toBeInTheDocument()
     expect(screen.getByTestId('map')).toHaveAttribute('data-focus', '2')
-    expect(window.location.hash).toBe('#/')
+    expect(window.location.hash).toBe('#/planner')
   })
 
   it('explains that there is nothing to show before an assessment, and offers the way forward', async () => {
@@ -245,7 +247,7 @@ describe('App: pages', () => {
     })
     expect(await screen.findByRole('heading', { name: 'Route 1 checkpoints' })).toBeInTheDocument()
     act(() => {
-      window.location.hash = '#/'
+      window.location.hash = '#/planner'
       window.dispatchEvent(new HashChangeEvent('hashchange'))
     })
     expect(await screen.findByRole('heading', { name: 'Plan a safer journey.' })).toBeInTheDocument()
@@ -368,5 +370,56 @@ describe('App: departure explorer with the batch endpoint', () => {
     const [first, refreshed] = [batch.mock.calls[0][0], batch.mock.calls[1][0]]
     expect(refreshed.departure_datetimes).toEqual([first.departure_datetimes[0]]) // the same departure, requested again
     await waitFor(() => expect(screen.queryByText(/more than 30 minutes old/)).not.toBeInTheDocument())
+  })
+})
+
+describe('App: landing page', () => {
+  beforeEach(() => {
+    window.location.hash = ''
+  })
+
+  it('opens on the landing page, not the planner', () => {
+    render(<App />)
+    expect(screen.getByRole('heading', { level: 1, name: /Plan around the weather/ })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Trip details' })).not.toBeInTheDocument()
+    expect(document.title).toMatch(/^Weather-Aware Routing/)
+    expect(screen.getAllByRole('link', { name: 'Weather data by Open-Meteo.com' })).toHaveLength(1) // one footer, not two
+  })
+
+  it('takes the primary call to action to the working planner', async () => {
+    render(<App />)
+    await userEvent.click(screen.getByRole('link', { name: /Plan a route/ }))
+    expect(await screen.findByRole('heading', { name: 'Plan a safer journey.' })).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/planner')
+    expect(screen.getByRole('heading', { name: 'Trip details' })).toBeInTheDocument()
+  })
+
+  it('takes the header action to the planner too, and the brand back to the landing page', async () => {
+    render(<App />)
+    await userEvent.click(screen.getByRole('link', { name: /Open planner/ }))
+    expect(await screen.findByRole('heading', { name: 'Plan a safer journey.' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: /Weather-Aware Routing, home/ }))
+    expect(await screen.findByRole('heading', { level: 1, name: /Plan around the weather/ })).toBeInTheDocument()
+  })
+
+  it('keeps in-page links on the landing page', async () => {
+    render(<App />)
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Sections' })).getByRole('link', { name: 'Risk rules' }))
+    await waitFor(() => expect(window.location.hash).toBe('#risk-rules'))
+    expect(screen.getByRole('heading', { level: 1, name: /Plan around the weather/ })).toBeInTheDocument()
+  })
+
+  it('still reaches the planner and back with the browser history hash', async () => {
+    render(<App />)
+    act(() => {
+      window.location.hash = '#/planner'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    expect(await screen.findByRole('heading', { name: 'Plan a safer journey.' })).toBeInTheDocument()
+    act(() => {
+      window.location.hash = '#/'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    expect(await screen.findByRole('heading', { level: 1, name: /Plan around the weather/ })).toBeInTheDocument()
   })
 })

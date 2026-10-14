@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export type Page = 'planner' | 'checkpoints'
+export type Page = 'home' | 'planner' | 'checkpoints'
 
-const HASH: Record<Page, string> = { planner: '#/', checkpoints: '#/checkpoints' }
+const HASH: Record<Page, string> = { home: '#/', planner: '#/planner', checkpoints: '#/checkpoints' }
 
+/**
+ * Anything that is not an app page is the landing page. That includes in-page anchors such as "#how-it-works",
+ * so smooth-scrolling links on the landing page never navigate away from it.
+ */
 function current(): Page {
-  return window.location.hash === HASH.checkpoints ? 'checkpoints' : 'planner'
+  const hash = window.location.hash
+  if (hash === HASH.planner) return 'planner'
+  if (hash === HASH.checkpoints) return 'checkpoints'
+  return 'home'
 }
 
-/** Tiny hash router for the two pages: no dependency, and the browser's back button works. */
+/** Tiny hash router for the three pages: no dependency, and the browser's back button works. */
 export function useHashRoute(): [Page, (page: Page) => void] {
   const [page, setPage] = useState<Page>(current)
 

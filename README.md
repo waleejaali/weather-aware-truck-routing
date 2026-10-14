@@ -394,7 +394,16 @@ npm test             # Vitest + Testing Library (no network, no API keys)
 
 ### Pages
 
-The app has two pages, switched from the header (hash routes `#/` and `#/checkpoints`, so the browser's back button works and there is no router dependency).
+The app has three pages, switched from the header (hash routes `#/`, `#/planner` and `#/checkpoints`, so the browser's back button works and there is no router dependency).
+Opening the site shows the landing page; its call to action goes to the planner.
+
+**Landing page** (`#/`) is a short company-style page in the same dark-teal theme: a hero with one headline and one action plus a real screenshot of the planner,
+*How it works* (three steps), *Principles* (four short points that are real behaviours of the app), *Risk rules* (the actual thresholds and load rules, rendered from
+`frontend/src/lib/riskRules.ts` and pinned by a test), and a closing call to action. It contains no invented statistics, testimonials or logos. Motion is restrained and
+purposeful: a staggered entrance in the hero, scroll-reveals, section rules that draw themselves, risk bands that fill in, and hover lifts, all on one easing curve and
+all disabled by `prefers-reduced-motion`. The map library is lazy-loaded, so the landing page does not download Leaflet. The hero image is a real capture of the working
+planner (`frontend/public/landing/planner-preview.webp`, Chicago to Atlanta, 42,000 lb, 50-mile checkpoints); regenerate it after big UI changes by running the app against the
+live API and capturing the planner at 1440 px wide.
 
 **Route planner** keeps the decision in one place:
 - **Trip details:** a *Quick trip* dropdown (or custom coordinates; the API takes lat/lon, not addresses, and no geocoder is configured), origin and destination with
@@ -432,6 +441,8 @@ It is responsive: the planner stacks on tablets and phones, the departure tabs r
   (about 1.5 MB, 270 KB gzipped, for nine departures) because every departure carries its checkpoints.
 - No geocoding: coordinates only. Times are shown in the viewer's local time zone, which may differ from the trip's.
 - The risk corridor colours the road around each sampled checkpoint; hazards between checkpoints can be missed (see Method limits above).
+- Open-Meteo's free API can be slow: a 50-location, four-day request was measured at about 33 s on one occasion, above the default 20 s `WEATHER_TIMEOUT_SECONDS`, which the API reports as a
+  retryable 504 `weather_timeout`. If you see this, raise `WEATHER_TIMEOUT_SECONDS` (for example 60) in `.env`, or use 50-mile checkpoint spacing for fewer locations.
 - Leaflet is not rendered in the jsdom tests, so map drawing is covered by the pure geometry tests plus real-browser runs (desktop and phone) against the live API.
 
 ### `POST /api/v1/routes/assess-batch/` (several departures, one trip)
