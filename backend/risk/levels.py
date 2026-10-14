@@ -1,9 +1,8 @@
-"""Risk levels. The integer value is the score used for averaging and for max() precedence."""
-
 from enum import IntEnum
 
 
 class RiskLevel(IntEnum):
+    # The values double as the risk score (for averaging) and the precedence order (for max()).
     LOW = 0
     MODERATE = 1
     HIGH = 2

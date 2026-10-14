@@ -1,10 +1,7 @@
 const pad = (n: number, width = 2) => String(Math.trunc(Math.abs(n))).padStart(width, '0')
 
-/**
- * Format an instant as ISO 8601 with an explicit UTC offset, e.g. 2026-10-14T08:00:00-07:00.
- * offsetMinutes is the zone's offset from UTC (negative west of Greenwich).
- */
 export function formatIsoWithOffset(date: Date, offsetMinutes: number): string {
+  // Shift then read UTC fields so the output doesn't depend on the browser's own zone.
   const shifted = new Date(date.getTime() + offsetMinutes * 60_000)
   const sign = offsetMinutes < 0 ? '-' : '+'
   const abs = Math.abs(offsetMinutes)
@@ -15,20 +12,17 @@ export function formatIsoWithOffset(date: Date, offsetMinutes: number): string {
   )
 }
 
-/** The browser's current UTC offset for a given instant, in minutes (west is negative). */
 export function localOffsetMinutes(date: Date): number {
+  // getTimezoneOffset() is positive west of UTC, the opposite of ISO 8601.
   return -date.getTimezoneOffset()
 }
 
-/**
- * Convert a <input type="datetime-local"> value (YYYY-MM-DDTHH:mm, no zone) into an ISO 8601
- * string with the browser's UTC offset. Returns null for invalid or non-existent local times.
- */
 export function localInputToIso(value: string): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value)
   if (!m) return null
   const [y, mo, d, h, mi] = m.slice(1).map(Number)
   const date = new Date(y, mo - 1, d, h, mi)
+  // Date silently rolls over invalid or DST-gap times, so reject anything that doesn't round-trip.
   const roundTrips =
     date.getFullYear() === y &&
     date.getMonth() === mo - 1 &&
@@ -38,13 +32,11 @@ export function localInputToIso(value: string): string | null {
   return roundTrips ? formatIsoWithOffset(date, localOffsetMinutes(date)) : null
 }
 
-/** Default form value: tomorrow 08:00 in the browser's time zone, as a datetime-local string. */
 export function defaultDepartureLocal(now: Date = new Date()): string {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 8, 0)
   return `${pad(d.getFullYear(), 4)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** Shift an ISO timestamp by whole hours; the result carries the browser's offset at that instant. */
 export function shiftIsoByHours(iso: string, hours: number): string {
   const shifted = new Date(new Date(iso).getTime() + hours * 3_600_000)
   return formatIsoWithOffset(shifted, localOffsetMinutes(shifted))
@@ -59,7 +51,6 @@ const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
   timeZoneName: 'short',
 })
 
-/** Render a backend timestamp (timezone-aware ISO 8601) in the user's local time zone. */
 export function formatLocalDateTime(iso: string): string {
   const date = new Date(iso)
   return Number.isNaN(date.getTime()) ? iso : dateTimeFormat.format(date)

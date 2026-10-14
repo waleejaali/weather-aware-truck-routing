@@ -1,5 +1,3 @@
-"""POST /api/v1/routes/assess/ contract tests. Providers are faked; no network, no API keys."""
-
 import gzip
 import json
 from contextlib import ExitStack
@@ -54,9 +52,8 @@ def payload(**changes):
 MISSING = object()
 
 
+# json.loads accepts NaN/Infinity by default, but they aren't valid JSON
 def strict_json(response):
-    """Parse the body rejecting NaN/Infinity, which are not valid JSON."""
-
     def refuse(constant):
         raise AssertionError(f"non-JSON constant {constant!r} in response")
 
@@ -64,7 +61,6 @@ def strict_json(response):
 
 
 def baseline_of(routes):
-    """The straight baseline route (where the test storms are), found by source, not by id or rank."""
     return next(r for r in routes if r["source"] == "baseline")
 
 
@@ -73,7 +69,7 @@ def straight_line_lat(lon):
 
 
 def storm_on_baseline(c, h, mph=50.0):
-    """Wind only on the straight baseline route's middle band (via-waypoint routes are >0.1 deg away)."""
+    # the via-waypoint routes stay more than 0.1 deg away from the straight line
     on_baseline = abs(c.lat - straight_line_lat(c.lon)) < 0.1 and -110 < c.lon < -100
     return wind(mph) if on_baseline else CALM
 
@@ -121,7 +117,7 @@ class SuccessContractTests(ApiTestCase):
         rec = data["recommendation"]
         self.assertEqual(rec["status"], "recommended")
         self.assertIn("not a guarantee of safety", rec["explanation"])
-        self.assertEqual(len(data["routes"]), 3)  # all candidates, not just the winner
+        self.assertEqual(len(data["routes"]), 3)
         self.assertEqual(rec["recommended_route_id"], data["routes"][0]["id"])
 
         method = data["method"]
@@ -235,7 +231,7 @@ class RankingAndSafetyTests(ApiTestCase):
         self.assertGreater(baseline_of(heavy)["risk_summary"]["no_travel_checkpoints"], 0)
 
     def test_ranking_order_and_recommendation_are_consistent(self):
-        # 40 mph with a 42,000 lb load is Severe on the baseline route's band, Low elsewhere.
+        # 40 mph at 42,000 lb is Severe (not No Travel) on the baseline
         self.weather = FakeWeatherProvider(lambda c, h: storm_on_baseline(c, h, mph=40.0))
         data = self.ok()
         routes = data["routes"]
@@ -258,7 +254,6 @@ class RankingAndSafetyTests(ApiTestCase):
         baseline = baseline_of(routes)
         self.assertGreater(baseline["risk_summary"]["miles"]["severe"], 0)
         self.assertEqual(baseline["rank"], 3)
-        # Routes 1 and 2 tie on risk, so travel time decides; the Severe-mile route loses on the first criterion.
         self.assertIn("a shorter travel time", routes[0]["ranking"]["explanation"])
         self.assertTrue(routes[1]["ranking"]["explanation"].startswith(f"Ranked below {routes[0]['id']}"))
         self.assertIn("fewer Severe miles (0 vs", routes[2]["ranking"]["explanation"])
@@ -273,12 +268,12 @@ class RankingAndSafetyTests(ApiTestCase):
         self.assertEqual(len(data["routes"]), 3)
 
     def test_insufficient_weather_means_no_recommendation_and_never_zero_weather(self):
-        departure = (NOW + timedelta(days=30)).isoformat()  # far beyond the 16-day forecast horizon
+        departure = (NOW + timedelta(days=30)).isoformat()
         data = self.ok(payload(departure_datetime=departure))
         self.assertEqual(data["recommendation"]["status"], "insufficient_weather_data")
         self.assertIsNone(data["recommendation"]["recommended_route_id"])
         self.assertIn("does not mean conditions are safe", data["recommendation"]["explanation"])
-        self.assertEqual(self.weather.calls, [])  # nothing requested outside the available range
+        self.assertEqual(self.weather.calls, [])
         for route in data["routes"]:
             self.assertFalse(route["eligible"])
             self.assertEqual(route["risk_summary"]["weather_coverage_percent"], 0.0)
@@ -287,18 +282,18 @@ class RankingAndSafetyTests(ApiTestCase):
             for cp in route["checkpoints"]:
                 self.assertEqual(cp["weather_status"], "unavailable")
                 self.assertIn("beyond the forecast horizon", cp["weather_missing_reason"])
-                self.assertTrue(all(v is None for v in cp["weather"].values()))  # null, never 0
+                self.assertTrue(all(v is None for v in cp["weather"].values()))
                 self.assertIsNone(cp["risk"]["combined"])
 
     def test_partial_weather_fields_are_preserved_with_reason(self):
-        self.weather = FakeWeatherProvider(lambda c, h: HourlyRecord(10.0, 15.0, None, 0.0))  # rain missing
+        self.weather = FakeWeatherProvider(lambda c, h: HourlyRecord(10.0, 15.0, None, 0.0))
         data = self.ok()
         cp = data["routes"][0]["checkpoints"][1]
         self.assertEqual(cp["weather_status"], "partial")
         self.assertIn("rain", cp["weather_missing_reason"])
         self.assertIsNone(cp["weather"]["rain_in_per_hr"])
         self.assertEqual(cp["weather"]["snow_in_per_hr"], 0.0)
-        self.assertEqual(cp["risk"]["combined"], "low")  # known hazards still classified
+        self.assertEqual(cp["risk"]["combined"], "low")
         self.assertIsNone(cp["risk"]["rain"])
         self.assertEqual(data["recommendation"]["status"], "recommended_incomplete_weather")
         self.assertFalse(data["routes"][0]["risk_summary"]["weather_data_complete"])
@@ -460,7 +455,7 @@ class ProviderFailureTests(ApiTestCase):
                     response = self.post()
                 self.assertGreaterEqual(response.status_code, 502)
                 self.assertNotIn(SECRET, response.content.decode())
-                self.assertNotIn(SECRET, "\n".join(logs.output))  # not in server logs either
+                self.assertNotIn(SECRET, "\n".join(logs.output))
                 self.assertNotIn("provider text", response.content.decode())
 
     def test_missing_ors_key_is_reported_as_unavailable_without_naming_settings(self):

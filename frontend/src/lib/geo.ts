@@ -13,12 +13,11 @@ export function haversineMeters(a: LatLng, b: LatLng): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
-/** GeoJSON positions are [longitude, latitude]; Leaflet polylines want [latitude, longitude]. */
+// GeoJSON is [lng, lat] but Leaflet wants [lat, lng].
 export function toLatLng(coordinates: readonly [number, number][]): LatLng[] {
   return coordinates.map(([lon, lat]) => [lat, lon])
 }
 
-/** Cumulative distance along the path as a fraction 0..1 for each vertex. */
 export function cumulativeFractions(path: readonly LatLng[]): number[] {
   const cumulative = [0]
   for (let i = 1; i < path.length; i++) cumulative.push(cumulative[i - 1] + haversineMeters(path[i - 1], path[i]))
@@ -26,7 +25,6 @@ export function cumulativeFractions(path: readonly LatLng[]): number[] {
   return cumulative.map((d) => d / total)
 }
 
-/** Point at a given fraction (0..1) of the path length, found by binary search. */
 function interpolate(path: readonly LatLng[], fractions: readonly number[], f: number): LatLng {
   if (f <= 0) return path[0]
   if (f >= 1) return path[path.length - 1]
@@ -50,16 +48,11 @@ export interface RiskSegment {
   positions: LatLng[]
 }
 
-/** The risk level a checkpoint contributes under the chosen colour mode (null = unknown). */
 export function levelFor(checkpoint: Checkpoint, colorBy: ColorBy): RiskKey | null {
   return checkpoint.risk[colorBy]
 }
 
-/**
- * Split a route into one polyline per checkpoint. Each checkpoint stands for the road halfway to
- * its neighbours - the same convention the backend uses for risk miles - so this draws exactly
- * the stretches the risk-mile totals are computed over. There is no weather between checkpoints.
- */
+// Each checkpoint covers the road halfway to its neighbours, matching how the backend counts risk miles.
 export function riskSegments(route: RouteAssessment, colorBy: ColorBy): RiskSegment[] {
   const path = toLatLng(route.geometry.coordinates)
   const checkpoints = route.checkpoints
@@ -74,7 +67,7 @@ export function riskSegments(route: RouteAssessment, colorBy: ColorBy): RiskSegm
   bounds.push(1)
 
   const segments: RiskSegment[] = []
-  let i = 0 // first vertex not yet assigned to a segment
+  let i = 0
   for (let k = 0; k < checkpoints.length; k++) {
     const start = Math.min(1, bounds[k])
     const end = Math.min(1, bounds[k + 1])

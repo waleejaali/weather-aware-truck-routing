@@ -1,7 +1,6 @@
 import type { RiskKey, RiskMiles } from '../api/types'
 import { ALL_RISK_META, RISK_ORDER, riskMeta } from '../lib/risk'
 
-/** A risk label with a shape glyph and text, so the level never depends on colour alone. */
 export function RiskBadge({ level, prefix, size = 'sm' }: { level: RiskKey | null; prefix?: string; size?: 'xs' | 'sm' }) {
   const meta = riskMeta(level)
   return (
@@ -20,7 +19,6 @@ export function RiskBadge({ level, prefix, size = 'sm' }: { level: RiskKey | nul
 
 const miles = (n: number) => `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} mi`
 
-/** Stacked bar of estimated risk miles plus an exact text legend. */
 export function RiskMilesBar({ miles: m }: { miles: RiskMiles }) {
   const values = ALL_RISK_META.map((meta) => ({ meta, value: m[meta.key] }))
   const total = values.reduce((sum, v) => sum + v.value, 0) || 1

@@ -19,7 +19,6 @@ CONFIG = ValidationConfig()
 
 class GeometryTests(TestCase):
     def test_haversine_known_distance(self):
-        # Los Angeles - Dallas is roughly 1,990 km great-circle.
         self.assertAlmostEqual(haversine_m(LOS_ANGELES, DALLAS) / 1000, 1990, delta=30)
 
     def test_destination_point_round_trip(self):
@@ -39,7 +38,7 @@ class GeometryTests(TestCase):
         self.assertAlmostEqual(
             haversine_m(LOS_ANGELES, mid) / haversine_m(LOS_ANGELES, DALLAS), 0.5, delta=0.01
         )
-        self.assertTrue(60 < bearing < 120)  # roughly east
+        self.assertTrue(60 < bearing < 120)
 
     def test_overlap_identical_and_disjoint(self):
         a = line_points(LOS_ANGELES, DALLAS)

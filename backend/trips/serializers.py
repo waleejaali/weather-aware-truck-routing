@@ -1,5 +1,3 @@
-"""Request validation for POST /api/v1/routes/assess/. Strict: no silent coercion of types or time zones."""
-
 import math
 from datetime import datetime, timezone
 
@@ -9,14 +7,13 @@ from routing.geometry import haversine_m
 from routing.types import Coordinate
 from trips.assessment import ALLOWED_INTERVALS_MILES
 
-MAX_BATCH_DEPARTURES = 12  # departures per batch request
-MAX_LOAD_LB = 150_000  # well above the 80,000 lb US gross vehicle limit, below absurd values
+MAX_BATCH_DEPARTURES = 12
+MAX_LOAD_LB = 150_000  # well above the 80,000 lb US gross weight limit, just a sanity cap
 MIN_TRIP_SEPARATION_M = 100.0
 
 
 class StrictNumberField(serializers.Field):
-    """A JSON number. Rejects strings, booleans, NaN and infinity (DRF's FloatField accepts them)."""
-
+    # DRF's FloatField happily accepts strings, booleans, NaN and inf.
     default_error_messages = {
         "invalid": "A number is required.",
         "not_finite": "Must be a finite number.",
@@ -35,8 +32,7 @@ class StrictNumberField(serializers.Field):
 
 
 class AwareDateTimeField(serializers.Field):
-    """ISO 8601 date-time WITH a UTC offset (or Z). Naive values are rejected, never assumed to be UTC."""
-
+    # Naive datetimes are rejected rather than assumed to be UTC.
     default_error_messages = {
         "invalid": "Use an ISO 8601 date-time such as 2026-10-14T08:00:00-05:00.",
         "naive": "Include a UTC offset (for example -05:00 or Z); times without one are ambiguous.",
@@ -73,8 +69,6 @@ class PointSerializer(serializers.Serializer):
 
 
 class TripFieldsSerializer(serializers.Serializer):
-    """Fields and rules shared by the single-departure and batch requests."""
-
     origin = PointSerializer()
     destination = PointSerializer()
     load_lb = StrictNumberField()

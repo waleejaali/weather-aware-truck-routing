@@ -1,5 +1,3 @@
-"""Pure geometry helpers on (lat, lon) paths. No network or Django imports."""
-
 import math
 from collections.abc import Sequence
 
@@ -26,7 +24,6 @@ def initial_bearing_deg(a: Coordinate, b: Coordinate) -> float:
 
 
 def destination_point(origin: Coordinate, bearing_deg: float, distance_m: float) -> Coordinate:
-    """Point reached travelling distance_m from origin along a great circle."""
     delta = distance_m / EARTH_RADIUS_M
     theta = math.radians(bearing_deg)
     lat1, lon1 = math.radians(origin.lat), math.radians(origin.lon)
@@ -61,10 +58,7 @@ def _locate(points: Sequence[Coordinate], cumulative: Sequence[float], distance_
 
 
 def points_at_distances(points: Sequence[Coordinate], distances_m: Sequence[float]) -> list[Coordinate]:
-    """Points at the given distances along the path, in one pass.
-
-    distances_m must be ascending; values outside the path are clamped to its ends.
-    """
+    """Single pass, so distances_m must be ascending. Out-of-range values clamp to the path ends."""
     if any(b < a for a, b in zip(distances_m, distances_m[1:])):
         raise ValueError("distances_m must be ascending")
     cumulative = _cumulative_m(points)
@@ -82,7 +76,6 @@ def points_at_distances(points: Sequence[Coordinate], distances_m: Sequence[floa
 
 
 def point_and_bearing_at_fraction(points: Sequence[Coordinate], fraction: float) -> tuple[Coordinate, float]:
-    """Point at a fraction of the path length, and the local travel bearing there."""
     cumulative = _cumulative_m(points)
     total = cumulative[-1]
     here = _locate(points, cumulative, fraction * total)
@@ -92,7 +85,6 @@ def point_and_bearing_at_fraction(points: Sequence[Coordinate], fraction: float)
 
 
 def resample(points: Sequence[Coordinate], step_m: float) -> list[Coordinate]:
-    """Points spaced step_m apart along the path (plus the final point)."""
     cumulative = _cumulative_m(points)
     total = cumulative[-1]
     if total == 0:
@@ -101,7 +93,6 @@ def resample(points: Sequence[Coordinate], step_m: float) -> list[Coordinate]:
     index = 1
     distance = 0.0
     while distance < total:
-        # Walk forward through segments instead of rescanning from the start.
         while cumulative[index] < distance:
             index += 1
         segment = cumulative[index] - cumulative[index - 1]
@@ -120,7 +111,7 @@ def overlap_fraction(
     tolerance_m: float = 500.0,
     sample_step_m: float = 500.0,
 ) -> float:
-    """Share (0-1) of candidate's length that runs within tolerance_m of other."""
+    """Fraction (0-1) of candidate's length that lies within tolerance_m of other."""
     samples = resample(candidate, sample_step_m)
     grid: dict[tuple[int, int], list[Coordinate]] = {}
     for p in resample(other, tolerance_m / 2):

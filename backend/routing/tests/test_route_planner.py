@@ -1,5 +1,3 @@
-"""Planner strategy tests using a scripted fake provider (no HTTP at all)."""
-
 from unittest import TestCase
 
 from routing.errors import (
@@ -26,7 +24,7 @@ class FakeProvider(RoutingProvider):
         self._alternatives = alternatives
         self._directions = directions
         self.alternative_calls = 0
-        self.direction_calls = []  # (waypoints, preference)
+        self.direction_calls = []
 
     def alternative_routes(self, origin, destination, target_count):
         self.alternative_calls += 1
@@ -40,17 +38,16 @@ class FakeProvider(RoutingProvider):
 
 
 def distinct_routes(a, b, count=3):
-    """Routes bowed 0, -0.06 and +0.12 degrees: kilometres apart on a short (~25 km) trip."""
+    # these bulges are kilometres apart on a ~25 km trip, so none overlap
     return [make_route(a, b, bulge_deg=bulge) for bulge in (0.0, -0.06, 0.12)[:count]]
 
 
 def long_trip_directions(waypoints, preference):
-    """Plausible provider behaviour for a long trip: shortest == fastest, via points are honoured."""
     origin, destination = waypoints[0], waypoints[-1]
     if len(waypoints) == 3:
         return route_via(origin, waypoints[1], destination)
     if preference == "shortest":
-        return make_route(origin, destination, bulge_deg=0.001)  # near-identical to baseline
+        return make_route(origin, destination, bulge_deg=0.001)
     return make_route(origin, destination)
 
 
@@ -98,7 +95,7 @@ class AlternativesPathTests(TestCase):
     def test_unreasonable_detour_alternative_is_rejected(self):
         a, b = LOS_ANGELES, NEAR_LOS_ANGELES
         provider = FakeProvider(
-            alternatives=[make_route(a, b), make_route(a, b, 2.0)],  # ~2 deg bulge on a ~25 km trip
+            alternatives=[make_route(a, b), make_route(a, b, 2.0)],
             directions=lambda wps, pref: (_ for _ in ()).throw(NoRouteFound("none", status_code=404)),
         )
         plan = RoutePlanner(provider).plan(a, b)
@@ -118,7 +115,7 @@ class AlternativesPathTests(TestCase):
 
     def test_invalid_geometry_is_rejected(self):
         a, b = LOS_ANGELES, NEAR_LOS_ANGELES
-        broken = route_from_points([a])  # single point
+        broken = route_from_points([a])
         provider = FakeProvider(alternatives=[broken, make_route(a, b)], directions=lambda w, p: make_route(a, b))
         plan = RoutePlanner(provider, PlannerConfig(max_provider_requests=1)).plan(a, b)
         self.assertEqual(len(plan.routes), 1)
@@ -130,11 +127,10 @@ class FallbackPathTests(TestCase):
         provider = FakeProvider(directions=long_trip_directions)
         plan = RoutePlanner(provider).plan(LOS_ANGELES, DALLAS)
 
-        self.assertEqual(provider.alternative_calls, 0)  # certain to exceed the 100 km limit
+        self.assertEqual(provider.alternative_calls, 0)  # ORS caps alternatives at 100 km
         self.assertTrue(any("Provider alternatives skipped" in n for n in plan.notes))
         self.assertEqual((plan.status, len(plan.routes)), ("complete", 3))
         self.assertEqual([r.strategy for r in plan.routes].count("baseline"), 1)
-        # Duplicate "shortest" candidate was rejected, not returned.
         self.assertTrue(any("shortest_preference" in n and "overlaps" in n for n in plan.notes))
 
     def test_via_points_are_off_the_straight_line_and_on_both_sides(self):
@@ -144,7 +140,6 @@ class FallbackPathTests(TestCase):
         self.assertGreaterEqual(len(vias), 2)
         for wps, _ in provider.direction_calls:
             self.assertEqual((wps[0], wps[-1]), (LOS_ANGELES, DALLAS))
-        # Both sides of the corridor are tried: via latitudes straddle the straight-line latitude.
         straight_lat_at = lambda lon: LOS_ANGELES.lat + (DALLAS.lat - LOS_ANGELES.lat) * (
             (lon - LOS_ANGELES.lon) / (DALLAS.lon - LOS_ANGELES.lon)
         )
@@ -200,7 +195,7 @@ class FallbackPathTests(TestCase):
         provider = FakeProvider(directions=directions)
         plan = RoutePlanner(provider).plan(LOS_ANGELES, DALLAS)
         self.assertEqual(len(plan.routes), 1)
-        self.assertEqual(len(provider.direction_calls), 3)  # baseline, shortest, one via - then stop
+        self.assertEqual(len(provider.direction_calls), 3)  # baseline, shortest, then the first via
         self.assertTrue(any("rate limit" in n for n in plan.notes))
 
 

@@ -1,5 +1,3 @@
-"""Interface every weather provider adapter implements."""
-
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
@@ -15,12 +13,8 @@ class WeatherProvider(ABC):
 
     @abstractmethod
     def available_window(self, now: datetime) -> tuple[datetime, datetime]:
-        """[start, end) of hours the provider can currently serve (aware UTC)."""
+        """[start, end) of hours the provider can serve right now, in UTC."""
 
     @abstractmethod
     def fetch_hourly(self, locations: Sequence[Coordinate], start: datetime, end: datetime) -> list[HourlySeries]:
-        """Hourly records covering [start, end] for every location, in the same order as locations.
-
-        Must batch requests where the API allows. Hours the provider has no data for are simply
-        absent (or have None fields); nothing is substituted. Raises WeatherProviderError subclasses.
-        """
+        """One series per location, same order. Missing hours are left out, never filled in."""

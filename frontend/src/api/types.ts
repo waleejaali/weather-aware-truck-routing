@@ -1,4 +1,4 @@
-// Types for POST /api/v1/routes/assess/. They mirror backend/trips/presenters.py and serializers.py.
+// Keep in sync with backend/trips/presenters.py and serializers.py.
 
 export type RiskKey = 'low' | 'moderate' | 'high' | 'severe' | 'no_travel'
 
@@ -18,11 +18,10 @@ export interface Point {
   longitude: number
 }
 
-/** Request body the backend expects. departure_datetime must carry a UTC offset. */
 export interface AssessRequest {
   origin: Point
   destination: Point
-  departure_datetime: string
+  departure_datetime: string // must include a UTC offset
   load_lb: number
   checkpoint_interval_miles: CheckpointInterval
 }
@@ -123,7 +122,6 @@ export interface RouteAssessment {
   duration_text: string
   departure_datetime: string
   arrival_datetime: string
-  /** GeoJSON LineString: coordinates are [longitude, latitude]. */
   geometry: { type: 'LineString'; coordinates: [number, number][] }
   risk_summary: RiskSummary
   ranking: {
@@ -157,12 +155,8 @@ export interface AssessResponse {
   routes: RouteAssessment[]
 }
 
-/** Which hazard colours the map corridor and checkpoint markers. */
 export type ColorBy = 'combined' | 'wind' | 'rain' | 'snow'
 
-// ---- POST /api/v1/routes/assess-batch/ ---------------------------------------------------------------
-
-/** One trip, several departures. Mirrors backend/trips/serializers.py BatchRequestSerializer. */
 export interface BatchRequest {
   origin: Point
   destination: Point
@@ -171,7 +165,7 @@ export interface BatchRequest {
   checkpoint_interval_miles: CheckpointInterval
 }
 
-/** Route geometry and totals are the same for every departure, so the batch sends them once. */
+// Geometry is identical across departures, so the batch response sends it once per route.
 export interface SharedRoute {
   id: string
   source: string

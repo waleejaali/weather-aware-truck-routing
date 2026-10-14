@@ -5,7 +5,6 @@ import { localInputToIso } from './time'
 export const MAX_LOAD_LB = 150_000
 export const MIN_TRIP_SEPARATION_M = 100
 
-/** Raw form state: everything is a string, exactly as typed. */
 export interface FormValues {
   originLat: string
   originLon: string
@@ -44,7 +43,6 @@ function checkCoordinate(
   return lat !== null && lon !== null && !errors[latField] && !errors[lonField] ? [lat, lon] : null
 }
 
-/** Validate the form and build the exact request body the backend expects. */
 export function validateForm(values: FormValues): ValidationResult {
   const errors: FormErrors = {}
   const origin = checkCoordinate(values.originLat, values.originLon, 'originLat', 'originLon', errors)
@@ -90,7 +88,6 @@ const SERVER_FIELD_MAP: Record<string, FormField> = {
   checkpoint_interval_miles: 'interval',
 }
 
-/** Map the backend's dotted field errors back onto form fields. Unknown keys are returned separately. */
 export function mapServerFieldErrors(fields: Record<string, string[]>): {
   errors: FormErrors
   unmapped: string[]

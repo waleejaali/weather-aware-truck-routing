@@ -8,21 +8,17 @@ export const MAX_FORECAST_OFFSET_HOURS = 48
 const COMMIT_DELAY_MS = 600
 const QUICK_OFFSETS = [0, 6, 12, 18, 24, 30, 36, 42, 48]
 
-/** What is known about one departure offset, derived from the assessments held for this trip. */
 export interface OffsetSummary {
   offsetHours: number
   state: 'ok' | 'stale' | 'error'
   status?: RecommendationStatus
   recommendedRouteId?: string | null
-  /** Minutes since this offset was assessed (ok/stale). */
   ageMinutes?: number
   message?: string
 }
 
 interface Props {
-  /** The departure the user submitted (offset 0). */
   baseDeparture: string
-  /** Offset whose assessment is displayed. */
   shownOffset: number
   loading: boolean
   summaries: OffsetSummary[]
@@ -43,15 +39,9 @@ function ageText(minutes: number): string {
   return `${Math.round(minutes / 60)} h ago`
 }
 
-/**
- * Departure-time slider (0-48 h after the entered departure). A bounded set of offsets is assessed together
- * when the trip is submitted (one server request, one route plan, one weather fetch). Other positions are
- * assessed on release, and old results are re-requested rather than shown as current. Weather is never
- * estimated in the browser.
- */
 export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries, lastBatch, onCommit }: Props) {
   const [pending, setPending] = useState(shownOffset)
-  // When a different departure becomes the displayed one, follow it ("adjust state while rendering").
+  // Sync to shownOffset during render instead of in an effect, to avoid a flash of the old value.
   const [seenShown, setSeenShown] = useState(shownOffset)
   if (shownOffset !== seenShown) {
     setSeenShown(shownOffset)
@@ -66,7 +56,7 @@ export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries,
     setPending(value)
     window.clearTimeout(timer.current)
     if (value === shownOffset && usable(value)) return
-    // Already assessed and fresh: show it right away. Otherwise wait until the slider settles, then request it.
+    // Debounce requests while dragging; fresh results can be shown immediately.
     if (immediate || usable(value)) onCommit(value)
     else timer.current = window.setTimeout(() => onCommit(value), COMMIT_DELAY_MS)
   }
@@ -101,7 +91,6 @@ export function ForecastSlider({ baseDeparture, shownOffset, loading, summaries,
           aria-valuetext={`${pending} hours after departure, ${formatLocalDateTime(departure)}`}
           className="w-full accent-indigo-700"
         />
-        {/* Marks show which departures actually have an assessment (filled) or a failure (cross). */}
         <div className="pointer-events-none relative mx-[7px] h-3" aria-hidden="true">
           {summaries.map((s) => (
             <span

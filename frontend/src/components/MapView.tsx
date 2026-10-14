@@ -13,13 +13,12 @@ const OTHER_ROUTE = '#64748b'
 interface Props {
   routes: RouteAssessment[]
   selectedId: string | null
-  /** null when the backend recommends nothing: then no route is highlighted as recommended. */
   recommendedId: string | null
   colorBy: ColorBy
   origin: LatLng | null
   destination: LatLng | null
   focus: { routeId: string; index: number } | null
-  /** Changes when a different trip is loaded, so the map re-fits only then (not on every forecast step). */
+  // Only changes for a new trip, so moving the forecast slider doesn't re-fit the map.
   fitKey: string
   loading: boolean
   onSelectRoute: (id: string) => void
@@ -122,7 +121,6 @@ export function MapView({
         />
         <FitBounds bounds={bounds} fitKey={fitKey} />
 
-        {/* Routes that are not selected: thin grey lines, with the recommended one picked out in blue. */}
         {others.map((route) => {
           const isRecommended = route.id === recommendedId
           const positions = paths.get(route.id)!
@@ -146,7 +144,6 @@ export function MapView({
           )
         })}
 
-        {/* Selected route: halo (blue only if it is the recommended route), white casing, then the risk corridor. */}
         {selected ? (
           <>
             {selected.id === recommendedId ? (

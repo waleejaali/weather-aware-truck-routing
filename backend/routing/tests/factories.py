@@ -1,5 +1,3 @@
-"""Synthetic test fixtures. These are NOT real routes; they only exercise the logic."""
-
 import math
 from collections.abc import Sequence
 
@@ -9,12 +7,11 @@ from routing.types import Coordinate, Route
 LOS_ANGELES = Coordinate(34.0522, -118.2437)
 DALLAS = Coordinate(32.7767, -96.7970)
 SAN_DIEGO = Coordinate(32.7157, -117.1611)
-NEAR_LOS_ANGELES = Coordinate(34.2, -118.0)  # ~25 km from LOS_ANGELES, well within 100 km
+NEAR_LOS_ANGELES = Coordinate(34.2, -118.0)  # ~25 km away, under the ORS 100 km alternatives limit
 AVERAGE_SPEED_MS = 25.0
 
 
 def line_points(a: Coordinate, b: Coordinate, *, bulge_deg: float = 0.0, n: int = 80) -> list[Coordinate]:
-    """Straight line from a to b, optionally bowed sideways (in latitude degrees)."""
     return [
         Coordinate(
             a.lat + (b.lat - a.lat) * t + bulge_deg * math.sin(math.pi * t),

@@ -1,4 +1,4 @@
-/** A weather reading with its unit, or an explicit "No data" - never a zero standing in for a missing value. */
+// Show "No data" rather than 0 so missing weather never looks like calm weather.
 export function Reading({ value, unit, digits = 1 }: { value: number | null; unit: string; digits?: number }) {
   if (value === null || value === undefined) {
     return <span className="italic text-slate-500">No data</span>

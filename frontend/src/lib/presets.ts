@@ -5,7 +5,6 @@ export interface TripPreset {
   values: Pick<FormValues, 'originLat' | 'originLon' | 'destLat' | 'destLon'>
 }
 
-// City-centre coordinates for convenience only; the assessment itself is always computed live.
 export const PRESETS: TripPreset[] = [
   { name: 'Los Angeles → Dallas', values: { originLat: '34.0522', originLon: '-118.2437', destLat: '32.7767', destLon: '-96.7970' } },
   { name: 'Chicago → Atlanta', values: { originLat: '41.8781', originLon: '-87.6298', destLat: '33.7490', destLon: '-84.3880' } },

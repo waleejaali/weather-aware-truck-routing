@@ -1,10 +1,4 @@
-"""Live end-to-end check: real routes (ORS) + real weather (Open-Meteo) + risk ranking.
-
-Needs ORS_API_KEY in .env. Not part of the automated test suite.
-
-    python manage.py check_weather --departure 2026-10-13T08:00:00-05:00 --load-lb 42000
-    python manage.py check_weather --interval-miles 50 --checkpoints
-"""
+# Hits the live ORS and Open-Meteo APIs (needs ORS_API_KEY); not part of the test suite.
 
 from datetime import datetime, timedelta, timezone
 

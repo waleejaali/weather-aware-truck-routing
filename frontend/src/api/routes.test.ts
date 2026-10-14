@@ -23,12 +23,12 @@ async function failure(): Promise<ApiError> {
   throw new Error('expected assessRoutes to reject')
 }
 
-// Braces matter: returning the mock from beforeEach makes Vitest call it as a teardown hook.
+// Keep the braces: a returned value from beforeEach is treated as a teardown hook.
 beforeEach(() => {
   post.mockReset()
 })
 
-// Reject lazily (when called). mockRejectedValue builds the rejected promise up front, which Node reports as unhandled.
+// mockRejectedValue creates the promise eagerly, which Node flags as an unhandled rejection.
 const rejectWith = (error: unknown) => post.mockImplementation(() => Promise.reject(error))
 
 describe('assessRoutes', () => {

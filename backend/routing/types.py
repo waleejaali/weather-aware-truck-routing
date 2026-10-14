@@ -1,5 +1,3 @@
-"""Provider-agnostic routing types."""
-
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -11,10 +9,7 @@ class Coordinate(NamedTuple):
 
 @dataclass(frozen=True)
 class Route:
-    """A drivable route between two places, as returned by a routing provider."""
-
     points: tuple[Coordinate, ...]
     distance_m: float
     duration_s: float
-    # How the route was obtained, e.g. "provider_alternative", "baseline", "via_waypoint".
-    strategy: str = "unspecified"
+    strategy: str = "unspecified"  # how the planner obtained it, e.g. "baseline" or "via_waypoint"

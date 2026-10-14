@@ -8,7 +8,7 @@ import type { BatchRequest, RecommendationStatus } from './api/types'
 import { PREFETCH_OFFSETS, STALE_AFTER_MS } from './hooks/useAssessment'
 import { makeBatch } from './test/fixtures'
 
-// jsdom cannot render Leaflet; the map's props are exposed through a stub instead.
+// Leaflet doesn't work in jsdom, so stub the map and expose its props as data attributes.
 vi.mock('./components/MapView', () => ({
   MapView: (props: { selectedId: string | null; recommendedId: string | null; routes: unknown[]; loading: boolean }) => (
     <div
@@ -28,7 +28,6 @@ vi.mock('./api/batch', async (importOriginal) => ({
 const batch = vi.mocked(assessBatch)
 type StatusFor = (index: number) => RecommendationStatus | 'error'
 
-/** Answer every batch request with a well-formed response whose statuses come from `statusFor`. */
 function serve(statusFor: StatusFor = () => 'recommended') {
   batch.mockImplementation(async (request: BatchRequest) => makeBatch(request, statusFor))
 }
@@ -81,7 +80,7 @@ describe('App: planning a trip', () => {
     expect(request.load_lb).toBe(42000)
     expect(request.checkpoint_interval_miles).toBe(25)
     expect(request.departure_datetimes).toHaveLength(PREFETCH_OFFSETS.length)
-    expect(request.departure_datetimes.length).toBeLessThanOrEqual(12) // the backend's batch limit
+    expect(request.departure_datetimes.length).toBeLessThanOrEqual(12) // backend batch limit
     expect(request.departure_datetimes[0]).toMatch(/^\d{4}-\d{2}-\d{2}T08:00:00[+-]\d{2}:\d{2}$/)
     PREFETCH_OFFSETS.forEach((hours, i) => expect(at(request, i) - at(request, 0)).toBe(hours * HOUR))
 
@@ -168,7 +167,7 @@ describe('App: provider failures', () => {
     await userEvent.click(within(alert).getByRole('button', { name: 'Try again' }))
     expect(await screen.findByRole('heading', { name: '3 candidate routes' })).toBeInTheDocument()
     expect(batch).toHaveBeenCalledTimes(2)
-    expect(batch.mock.calls[1][0]).toEqual(batch.mock.calls[0][0]) // same departures, same trip
+    expect(batch.mock.calls[1][0]).toEqual(batch.mock.calls[0][0])
   })
 })
 
@@ -189,7 +188,7 @@ describe('App: forecast slider with the batch endpoint', () => {
     expect(screen.getByTestId('map')).toHaveAttribute('data-recommended', 'none')
     await userEvent.click(screen.getByRole('button', { name: '+6 h' }))
     expect(await screen.findByRole('heading', { name: 'Recommended route' })).toBeInTheDocument()
-    expect(batch).toHaveBeenCalledTimes(1) // 9 departures, one request; moving the slider costs nothing
+    expect(batch).toHaveBeenCalledTimes(1)
   })
 
   it('lists which departures were really assessed, with their own statuses', async () => {
@@ -197,7 +196,7 @@ describe('App: forecast slider with the batch endpoint', () => {
     expect(screen.getByRole('button', { name: /\+24 h\s*No safe route/ })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /Recommended · Route 1/ }).length).toBe(PREFETCH_OFFSETS.length - 1)
     expect(screen.getByTitle('+24 h: assessed')).toBeInTheDocument()
-    expect(screen.queryByTitle('+7 h: assessed')).not.toBeInTheDocument() // never assessed, so not marked
+    expect(screen.queryByTitle('+7 h: assessed')).not.toBeInTheDocument()
   })
 
   it('requests a single new departure for an offset that was not prefetched', async () => {
@@ -210,7 +209,7 @@ describe('App: forecast slider with the batch endpoint', () => {
     const second = batch.mock.calls[1][0]
     expect(second.departure_datetimes).toHaveLength(1)
     expect(at(second, 0) - at(first, 0)).toBe(7 * HOUR)
-    expect({ ...second, departure_datetimes: [] }).toEqual({ ...first, departure_datetimes: [] }) // same trip, only the time differs
+    expect({ ...second, departure_datetimes: [] }).toEqual({ ...first, departure_datetimes: [] })
     expect(await screen.findByTitle('+7 h: assessed')).toBeInTheDocument()
   })
 
@@ -230,7 +229,7 @@ describe('App: forecast slider with the batch endpoint', () => {
     expect(screen.getByTitle('+12 h: failed')).toBeInTheDocument()
     const chip = screen.getByRole('button', { name: /\+12 h\s*Failed - retry/ })
 
-    serve() // the retry succeeds
+    serve()
     await userEvent.click(chip)
     await waitFor(() => expect(batch).toHaveBeenCalledTimes(2))
     expect(batch.mock.calls[1][0].departure_datetimes).toHaveLength(1)
@@ -250,7 +249,7 @@ describe('App: forecast slider with the batch endpoint', () => {
 
   it('offers a refresh when the displayed assessment gets old, and refreshing requests that departure again', async () => {
     serve()
-    // Fake only the interval timer so the clock-driven "now" can be advanced without freezing user events.
+    // Only fake intervals; faking setTimeout too would hang userEvent.
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     render(<App />)
     await fillAndSubmit()
@@ -267,7 +266,7 @@ describe('App: forecast slider with the batch endpoint', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(batch).toHaveBeenCalledTimes(2))
     const [first, refreshed] = [batch.mock.calls[0][0], batch.mock.calls[1][0]]
-    expect(refreshed.departure_datetimes).toEqual([first.departure_datetimes[0]]) // the same departure, requested again
+    expect(refreshed.departure_datetimes).toEqual([first.departure_datetimes[0]])
     await waitFor(() => expect(screen.queryByText(/more than 30 minutes old/)).not.toBeInTheDocument())
   })
 })

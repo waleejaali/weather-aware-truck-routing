@@ -1,9 +1,3 @@
-"""Domain objects -> the JSON response of POST /api/v1/routes/assess/. Pure: no I/O, no Django.
-
-Everything here is read from the pipeline's results. Missing weather stays null (never 0), and the
-risk levels, eligibility and ranking are exactly what the risk engine decided.
-"""
-
 from datetime import datetime, timezone
 from typing import Any
 
@@ -172,9 +166,6 @@ def _checkpoint(c: CheckpointAssessment) -> dict[str, Any]:
     }
 
 
-# -- explanations --------------------------------------------------------------------------------
-
-
 def _recommendation_text(trip: TripAssessment) -> str:
     caveat = " This is based on forecast conditions at sampled checkpoints and is not a guarantee of safety."
     r = trip.recommended
@@ -210,7 +201,7 @@ def _ranking_explanation(r: RouteAssessment, ordered: tuple[RouteAssessment, ...
 
 
 def _decisive(better: RouteAssessment, worse: RouteAssessment) -> str:
-    """The first ranking criterion (in the risk engine's order) on which `better` beats `worse`."""
+    # Checks criteria in the same order as risk.ranking so the explanation matches the actual ranking.
     a, b = better.summary, worse.summary
     if a.data_complete and not b.data_complete:
         return "complete weather data where the other route has gaps"
@@ -228,9 +219,6 @@ def _decisive(better: RouteAssessment, worse: RouteAssessment) -> str:
             f"{_duration_text(worse.route.duration_s)})"
         )
     return "equal ranking on every criterion"
-
-
-# -- small helpers ---------------------------------------------------------------------------------
 
 
 def _route_id(r: RouteAssessment) -> str:
@@ -255,15 +243,8 @@ def _duration_text(seconds: float) -> str:
     return f"{hours} h {minutes} min" if hours else f"{minutes} min"
 
 
-# -- batch response ---------------------------------------------------------------------------------
-
-
 def present_batch(result: BatchResult, params: dict[str, Any]) -> dict[str, Any]:
-    """Response for POST /api/v1/routes/assess-batch/.
-
-    Route geometry is identical for every departure, so it is sent once in `routes` and each result's
-    routes refer to it by id. Everything else per route is exactly what the single endpoint returns.
-    """
+    # Geometry is the same for every departure, so it's sent once and per-departure routes refer to it by id.
     plan = result.plan
     first = next((o.assessment for o in result.outcomes if o.assessment is not None), None)
     assert first is not None  # the view rejects batches where nothing could be assessed

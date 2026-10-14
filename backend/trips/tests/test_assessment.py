@@ -1,5 +1,3 @@
-"""Orchestration tests: fake weather provider, synthetic routes, no HTTP."""
-
 from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 
@@ -69,11 +67,10 @@ def wind(mph, **extra):
 
 class WeatherAtArrivalTests(TestCase):
     def setUp(self):
-        # 200 mi in 10 h; checkpoints every 50 mi arrive 2.5 h apart.
+        # 200 mi in 10 h, so 50 mi checkpoints are 2.5 h apart
         self.route = Route(tuple(line_points(LOS_ANGELES, DALLAS)), 200 * MILE, 10 * 3600.0)
 
     def test_each_checkpoint_uses_the_weather_at_its_own_arrival_time(self):
-        # A storm only after 14:00 UTC; departure 08:00 UTC is calm.
         storm_start = DEPARTURE + timedelta(hours=6)
         provider = FakeWeatherProvider(lambda c, h: wind(60.0) if h >= storm_start else CALM)
         trip = assess([self.route], provider)
@@ -81,7 +78,7 @@ class WeatherAtArrivalTests(TestCase):
         etas = [cp.eta for cp in trip.routes[0].checkpoints]
         for eta, hours in zip(etas, (0, 2.5, 5, 7.5, 10)):
             self.assertLess(abs(eta - (DEPARTURE + timedelta(hours=hours))), timedelta(seconds=1))
-        # Wind interpolates, so the 5.0 h checkpoint (13:00) is calm and the 7.5 h one (15:30) is stormy.
+        # wind is interpolated, so 13:00 is still calm but 15:30 is not
         self.assertEqual(levels[:3], [L.LOW, L.LOW, L.LOW])
         self.assertEqual(levels[3:], [L.NO_TRAVEL, L.NO_TRAVEL])
         self.assertTrue(trip.routes[0].summary.has_no_travel)
@@ -95,7 +92,7 @@ class WeatherAtArrivalTests(TestCase):
 
     def test_departure_in_another_timezone_is_converted(self):
         central = timezone(timedelta(hours=-5))
-        trip = assess([self.route], departure=datetime(2026, 10, 14, 3, 0, tzinfo=central))  # == 08:00 UTC
+        trip = assess([self.route], departure=datetime(2026, 10, 14, 3, 0, tzinfo=central))
         self.assertEqual(trip.routes[0].departure, DEPARTURE)
         self.assertEqual(trip.routes[0].checkpoints[0].eta, DEPARTURE)
 
@@ -132,7 +129,6 @@ class UnavailableWeatherTests(TestCase):
             self.assertIsNone(cp.conditions)
             self.assertIn("beyond the forecast horizon", cp.unavailable_reason)
         self.assertEqual(trip.routes[0].summary.unknown_miles, 200)
-        # No weather at all: nothing can be called safe, so there is no recommendation.
         self.assertEqual(trip.status, STATUS_INSUFFICIENT_WEATHER)
         self.assertIsNone(trip.recommended)
         self.assertFalse(trip.routes[0].eligible)
@@ -145,16 +141,16 @@ class UnavailableWeatherTests(TestCase):
 
     def test_trip_crossing_the_horizon_is_partially_known(self):
         provider = FakeWeatherProvider()
-        # The window ends 16 days after today's midnight; depart 5 h before it (ETAs 19:00, 21:30, then past the end).
+        # window ends at midnight + 16 days; leaving 5 h earlier only the first two ETAs fit
         departure = NOW.replace(hour=0) + timedelta(days=16) - timedelta(hours=5)
         trip = assess([self.route], provider, departure=departure)
         known = [cp.level is not None for cp in trip.routes[0].checkpoints]
         self.assertEqual(known, [True, True, False, False, False])
         self.assertFalse(trip.routes[0].summary.data_complete)
-        self.assertEqual(len(provider.calls[0][0]), 2)  # only servable checkpoints were requested
+        self.assertEqual(len(provider.calls[0][0]), 2)
 
     def test_missing_hours_leave_checkpoints_unknown_without_substitution(self):
-        # ETAs 08:00, 10:30, 13:00, 15:30, 18:00. 13:00 needs the 13:00 record; 15:30 needs 15:00 and 16:00.
+        # the 15:30 ETA interpolates between 15:00 and 16:00, so dropping 16:00 loses it too
         provider = FakeWeatherProvider(lambda c, h: None if h.hour in (13, 16) else wind(10.0))
         trip = assess([self.route], provider)
         cps = trip.routes[0].checkpoints
@@ -165,7 +161,7 @@ class UnavailableWeatherTests(TestCase):
     def test_partial_fields_keep_the_hazards_that_are_known(self):
         provider = FakeWeatherProvider(lambda c, h: HourlyRecord(60.0, 60.0, None, 0.0))
         cp = assess([self.route], provider).routes[0].checkpoints[1]
-        self.assertEqual(cp.level, L.NO_TRAVEL)  # wind alone is enough
+        self.assertEqual(cp.level, L.NO_TRAVEL)
         self.assertFalse(cp.complete)
         self.assertIn("rain", cp.unavailable_reason)
 
@@ -186,14 +182,14 @@ class RecommendationTests(TestCase):
 
     def storm_on_straight_route(self, c, h):
         on_straight = abs(c.lat - self.straight_line_lat(c.lon)) < 0.1 and -110 < c.lon < -100
-        return wind(50.0) if on_straight else CALM  # Severe for a light load
+        return wind(50.0) if on_straight else CALM
 
     def test_route_avoiding_the_storm_wins_over_the_faster_one(self):
         trip = assess([self.straight, self.north, self.south], FakeWeatherProvider(self.storm_on_straight_route))
         by_plan = {r.plan_index: r for r in trip.routes}
         self.assertGreater(by_plan[0].summary.miles(L.SEVERE), 0)
         self.assertEqual(by_plan[1].summary.miles(L.SEVERE), 0)
-        self.assertEqual(trip.routes[-1].plan_index, 0)  # straight route ranked last
+        self.assertEqual(trip.routes[-1].plan_index, 0)
         self.assertIn(trip.recommended.plan_index, (1, 2))
         self.assertEqual(trip.status, STATUS_RECOMMENDED)
         self.assertEqual([r.rank for r in trip.routes], [1, 2, 3])
@@ -221,14 +217,14 @@ class RecommendationTests(TestCase):
         self.assertTrue(any("No Travel" in n for n in trip.notes))
 
     def missing_in_band(self, lon_min, lon_max):
-        def weather(c, h):  # weather is missing along the (faster) straight route only
+        def weather(c, h):
             on_straight = abs(c.lat - self.straight_line_lat(c.lon)) < 0.1 and lon_min < c.lon < lon_max
             return None if on_straight else CALM
 
         return FakeWeatherProvider(weather)
 
     def test_route_with_too_little_weather_is_not_recommended_even_if_fastest(self):
-        trip = assess([self.straight, self.north], self.missing_in_band(-110, -100))  # ~half the route unknown
+        trip = assess([self.straight, self.north], self.missing_in_band(-110, -100))  # ~half the route
         straight = next(r for r in trip.routes if r.plan_index == 0)
         self.assertFalse(straight.eligible)
         self.assertIn("only", straight.ineligible_reason)
@@ -237,12 +233,12 @@ class RecommendationTests(TestCase):
         self.assertTrue(any("Route 1 cannot be recommended" in n for n in trip.notes))
 
     def test_small_gap_keeps_route_eligible_but_ranks_it_after_complete_routes(self):
-        trip = assess([self.straight, self.north], self.missing_in_band(-102, -100))  # a few % unknown
+        trip = assess([self.straight, self.north], self.missing_in_band(-102, -100))  # only a few percent
         straight = next(r for r in trip.routes if r.plan_index == 0)
         self.assertTrue(straight.eligible)
         self.assertFalse(straight.summary.data_complete)
         self.assertGreater(straight.weather_coverage, 0.8)
-        self.assertEqual(trip.recommended.plan_index, 1)  # slower, but its weather is fully known
+        self.assertEqual(trip.recommended.plan_index, 1)
         self.assertTrue(any("ranked after" in n for n in trip.notes))
 
     def test_only_route_with_a_small_gap_is_recommended_with_an_explicit_warning(self):
@@ -252,7 +248,7 @@ class RecommendationTests(TestCase):
 
     def test_no_travel_plus_insufficient_data_is_insufficient_not_no_safe_route(self):
         def weather(c, h):
-            if c.lat > self.straight_line_lat(c.lon) + 0.2:  # north route: no data at all in the middle
+            if c.lat > self.straight_line_lat(c.lon) + 0.2:
                 return None
             on_straight = abs(c.lat - self.straight_line_lat(c.lon)) < 0.1 and -110 < c.lon < -100
             return wind(60.0) if on_straight else CALM

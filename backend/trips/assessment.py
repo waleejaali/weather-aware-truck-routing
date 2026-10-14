@@ -1,15 +1,3 @@
-"""Assess candidate routes for weather risk and recommend one.
-
-Flow: sample checkpoints per route -> estimate each checkpoint's arrival -> fetch hourly weather for
-all checkpoints of all routes in batched requests -> pick the weather valid at each arrival ->
-classify risk (with load rules) -> aggregate per route -> rank. Pure orchestration: HTTP lives in the
-weather provider, thresholds and ranking in `risk`, geometry in `routing`.
-
-Honesty rules: a checkpoint whose arrival is outside the provider's available range, or whose hours
-are missing, is reported as unavailable/incomplete with a reason. Weather from another time (such as
-"current conditions") is never substituted.
-"""
-
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -29,19 +17,19 @@ WIND_METRICS = ("sustained", "gust")
 
 STATUS_RECOMMENDED = "recommended"
 STATUS_RECOMMENDED_INCOMPLETE = "recommended_incomplete_weather"
-STATUS_NO_SAFE_ROUTE = "no_safe_route"  # every route has a No Travel checkpoint
-STATUS_INSUFFICIENT_WEATHER = "insufficient_weather_data"  # no route has enough weather data to compare/recommend
+STATUS_NO_SAFE_ROUTE = "no_safe_route"
+STATUS_INSUFFICIENT_WEATHER = "insufficient_weather_data"
 
 
 @dataclass(frozen=True)
 class CheckpointAssessment:
     checkpoint: Checkpoint
     eta: datetime  # UTC
-    conditions: SampledConditions | None  # None when weather was not requested/available
+    conditions: SampledConditions | None
     risk: ConditionRisk | None
     complete: bool
-    unavailable_reason: str | None  # why weather is missing/incomplete, if it is
-    wind_mph_used: float | None = None  # the single wind value (per wind_metric) that fed the risk rules
+    unavailable_reason: str | None
+    wind_mph_used: float | None = None
 
     @property
     def level(self) -> RiskLevel | None:
@@ -51,13 +39,13 @@ class CheckpointAssessment:
 @dataclass(frozen=True)
 class RouteAssessment:
     route: Route
-    plan_index: int  # position in the input routes
+    plan_index: int
     departure: datetime
     arrival: datetime
     checkpoints: tuple[CheckpointAssessment, ...]
     summary: RouteRiskSummary
     rank: int  # 1 = best
-    eligible: bool  # may be recommended: no No Travel checkpoint and enough weather coverage
+    eligible: bool
     ineligible_reason: str | None
     recommended: bool
 
@@ -79,9 +67,9 @@ class TripAssessment:
     attribution: Attribution
     interval_miles: float
     load_lb: float
-    wind_metric: str  # "sustained" or "gust": the only wind value used for risk
+    wind_metric: str
     min_weather_coverage: float
-    assumptions: tuple[str, ...]  # method limits that any display of the results must carry
+    assumptions: tuple[str, ...]
 
 
 def assess_routes(
@@ -95,10 +83,6 @@ def assess_routes(
     wind_metric: str = "sustained",
     min_weather_coverage: float = DEFAULT_MIN_COVERAGE,
 ) -> TripAssessment:
-    """Weather-risk assessment and ranking of already-planned routes.
-
-    departure and now must be timezone-aware. Raises WeatherProviderError if the weather request fails.
-    """
     if not routes:
         raise ValueError("routes must not be empty")
     if departure.tzinfo is None or now.tzinfo is None:
@@ -116,14 +100,13 @@ def assess_routes(
     window_start, window_end = provider.available_window(now)
     notes: list[str] = []
 
-    # 1. Checkpoints and arrival times for every route.
-    sampled = []  # [route_index] -> list[(Checkpoint, eta)]
+    sampled = []
     for route in routes:
         checkpoints = sample_checkpoints(route, interval_miles)
         sampled.append([(cp, estimate_arrival(departure, route, cp)) for cp in checkpoints])
 
-    # 2. Which checkpoints can the provider serve at their arrival hour? Others stay unavailable.
-    requests_: list[tuple[int, int]] = []  # (route_index, checkpoint_index) in request order
+    # Checkpoints outside the provider's window stay unavailable; we never substitute weather from another time.
+    requests_: list[tuple[int, int]] = []  # (route_index, checkpoint_index)
     unavailable: dict[tuple[int, int], str] = {}
     for r, items in enumerate(sampled):
         for c, (cp, eta) in enumerate(items):
@@ -141,7 +124,6 @@ def assess_routes(
             "the provider's available range; no other weather was substituted."
         )
 
-    # 3. One batched fetch for all routes (the provider chunks and de-duplicates locations).
     series_by_request: dict[tuple[int, int], object] = {}
     if requests_:
         etas = [sampled[r][c][1] for r, c in requests_]
@@ -150,7 +132,6 @@ def assess_routes(
         )
         series_by_request = dict(zip(requests_, series))
 
-    # 4. Conditions -> risk per checkpoint.
     assessed: list[list[CheckpointAssessment]] = []
     for r, items in enumerate(sampled):
         row = []
@@ -175,7 +156,6 @@ def assess_routes(
             )
         assessed.append(row)
 
-    # 5. Summaries and ranking.
     summaries = [
         summarize([CheckpointRisk(a.level, a.checkpoint.segment_miles, a.complete) for a in row]) for row in assessed
     ]

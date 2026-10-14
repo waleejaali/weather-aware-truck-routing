@@ -4,13 +4,10 @@ import { ApiError } from '../api/routes'
 import type { AssessRequest, AssessResponse, BatchRequest, BatchResponse, RecommendationStatus } from '../api/types'
 import { shiftIsoByHours } from '../lib/time'
 
-/**
- * Forecast offsets (hours after the entered departure) assessed together when a trip is submitted: one batch
- * request, one route plan and one weather fetch on the server. Bounded on purpose - not every hour.
- */
+// Bounded on purpose: prefetching every hour would multiply weather lookups on the server.
 export const PREFETCH_OFFSETS: readonly number[] = [0, 6, 12, 18, 24, 30, 36, 42, 48]
 
-/** Weather forecasts are refreshed by the provider through the day, so an old assessment is not shown as current. */
+// The provider refreshes forecasts through the day, so old results shouldn't be shown as current.
 export const STALE_AFTER_MS = 30 * 60 * 1000
 
 export type OffsetEntry =
@@ -26,13 +23,9 @@ export interface BatchStats {
 
 export interface AssessmentState {
   phase: 'idle' | 'loading' | 'success' | 'error'
-  /** The request as submitted by the user (offset 0). */
   base: AssessRequest | null
-  /** Every offset assessed (or failed) for this trip. */
   entries: Record<number, OffsetEntry>
-  /** The offset whose assessment is displayed. */
   shownOffset: number
-  /** The offset being requested, while loading. */
   requestedOffset: number
   error: ApiError | null
   lastBatch: BatchStats | null
@@ -56,7 +49,6 @@ function departureFor(base: AssessRequest, offsetHours: number): string {
   return offsetHours === 0 ? base.departure_datetime : shiftIsoByHours(base.departure_datetime, offsetHours)
 }
 
-/** Turn a batch response into per-offset entries, checking each result is for the departure we asked for. */
 function toEntries(batch: BatchResponse, offsets: readonly number[], asked: readonly string[], at: number): Record<number, OffsetEntry> {
   if (batch.results.length !== offsets.length) throw new ApiError('unexpected', 'The server returned a different number of results than departures requested.')
   const entries: Record<number, OffsetEntry> = {}
@@ -78,10 +70,8 @@ function toEntries(batch: BatchResponse, offsets: readonly number[], asked: read
   return entries
 }
 
-/** Request state for trip assessments: bounded batch prefetch, per-offset entries, staleness and retries. */
 export function useAssessment() {
   const [state, setState] = useState<AssessmentState>(INITIAL)
-  // Event handlers read the latest state through a ref that is updated after each commit (never during render).
   const stateRef = useRef(state)
   useEffect(() => {
     stateRef.current = state
@@ -135,10 +125,8 @@ export function useAssessment() {
     }
   }, [])
 
-  /** Assess a new trip: the entered departure plus the bounded set of later departures, in one request. */
   const submit = useCallback((request: AssessRequest) => run(request, PREFETCH_OFFSETS, 0, true), [run])
 
-  /** Show a departure. Fresh results are shown instantly; anything else is requested (routes are reused server-side). */
   const selectOffset = useCallback(
     (offset: number) => {
       const s = stateRef.current

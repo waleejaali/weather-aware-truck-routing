@@ -4,7 +4,7 @@ import type { AssessResponse, BatchRequest, BatchResponse, BatchResult } from '.
 
 const BATCH_PATH = '/api/v1/routes/assess-batch/'
 
-/** Reject payloads that do not have the shape the UI relies on, instead of crashing while rendering. */
+// Fail here rather than crash mid-render on a malformed payload.
 export function parseBatchResponse(data: unknown): BatchResponse {
   const bad = () => new ApiError('unexpected', 'The server returned a response this app cannot read.')
   if (!isRecord(data) || !Array.isArray(data.routes) || !Array.isArray(data.results) || !isRecord(data.method) || !isRecord(data.diagnostics)) {
@@ -21,7 +21,6 @@ export function parseBatchResponse(data: unknown): BatchResponse {
   return data as unknown as BatchResponse
 }
 
-/** POST one trip with several departures. Routes are planned and weather fetched once on the server. */
 export async function assessBatch(request: BatchRequest, signal?: AbortSignal): Promise<BatchResponse> {
   try {
     const { data } = await apiClient.post<unknown>(BATCH_PATH, request, { signal, timeout: ASSESS_TIMEOUT_MS })
@@ -31,10 +30,6 @@ export async function assessBatch(request: BatchRequest, signal?: AbortSignal): 
   }
 }
 
-/**
- * Rebuild the single-departure response shape for one successful batch result, re-attaching the shared
- * geometry by route id. Everything else comes from the result untouched, so no value is computed here.
- */
 export function expandBatchResult(batch: BatchResponse, result: Extract<BatchResult, { ok: true }>): AssessResponse {
   const geometry = new Map(batch.routes.map((r) => [r.id, r.geometry]))
   return {

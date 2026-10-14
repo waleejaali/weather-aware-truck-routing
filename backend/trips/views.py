@@ -1,10 +1,3 @@
-"""POST /api/v1/routes/assess/ - thin HTTP layer over trips.services.assess_trip.
-
-Status codes: 200 success (including no-recommendation outcomes, which are results, not errors),
-400 invalid input, 422 no drivable route, 502/503/504 routing or weather provider failure,
-500 anything unexpected. Error bodies are generic; details go to the server log only.
-"""
-
 import logging
 from datetime import datetime, timezone
 
@@ -41,7 +34,7 @@ def utcnow() -> datetime:
 
 class AssessRoutesView(APIView):
     def post(self, request):
-        data = request.data  # malformed JSON raises ParseError -> handled by core.exceptions
+        data = request.data  # bad JSON raises ParseError, handled in core.exceptions
         serializer = AssessRequestSerializer(data=data)
         if not serializer.is_valid():
             return error_response(
@@ -79,13 +72,6 @@ class AssessRoutesView(APIView):
 
 
 class AssessBatchView(APIView):
-    """POST /api/v1/routes/assess-batch/ - one trip, several departures, routes and weather fetched once.
-
-    Same validation rules, units, risk rules and statuses as the single endpoint; results are ordered like the
-    request and identified by departure. Failures that affect every departure (routing, shared weather fetch)
-    return the same errors as the single endpoint; a failure confined to one departure is reported on it.
-    """
-
     def post(self, request):
         data = request.data
         serializer = BatchRequestSerializer(data=data)

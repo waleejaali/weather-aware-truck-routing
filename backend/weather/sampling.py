@@ -1,15 +1,3 @@
-"""Pick the weather that applies at a checkpoint's arrival time t. Pure functions.
-
-Hourly records are stamped at whole hours (UTC). Which record applies depends on what the field means:
-
-  wind speed (instantaneous)  linear interpolation between the records at floor(t) and ceil(t)
-  gust, rain, snow            the record stamped ceil(t): its "preceding hour" window contains t
-                              (a t exactly on the hour uses the record stamped t)
-
-No other hour is ever substituted. If a needed record or field is missing, that value is None and
-is listed in `missing`; callers decide what an incomplete checkpoint means.
-"""
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -20,7 +8,7 @@ _HOUR = timedelta(hours=1)
 
 @dataclass(frozen=True)
 class SampledConditions:
-    wind_mph: float | None  # sustained, interpolated
+    wind_mph: float | None
     gust_mph: float | None
     rain_in_hr: float | None
     snow_in_hr: float | None
@@ -43,6 +31,8 @@ def sample_conditions(series: HourlySeries, arrival: datetime) -> SampledConditi
     lower, upper = floor_hour(t), ceil_hour(t)
     upper_record = series.records.get(upper)
 
+    # Wind speed is instantaneous, so interpolate. Gust/rain/snow cover the preceding hour,
+    # so the record stamped ceil(t) is the one whose window contains t.
     wind = _interpolated_wind(series.records.get(lower), upper_record, lower, t)
     gust = _field(upper_record, "wind_gust_mph")
     rain = _field(upper_record, "rain_in")

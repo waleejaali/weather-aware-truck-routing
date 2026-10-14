@@ -1,41 +1,36 @@
-"""Routing errors. Provider adapters translate their own failures into these."""
-
-
 class RoutingError(Exception):
-    """Base class for all routing failures."""
+    pass
 
 
 class RoutingProviderError(RoutingError):
-    """The routing provider failed or returned something unusable."""
+    pass
 
 
 class ProviderConfigurationError(RoutingProviderError):
-    """Provider credentials or settings are missing or invalid."""
+    pass
 
 
 class ProviderAuthError(RoutingProviderError):
-    """The provider rejected the credentials (HTTP 401/403)."""
+    pass
 
 
 class ProviderRateLimitError(RoutingProviderError):
-    """The provider quota or rate limit was hit (HTTP 429)."""
+    pass
 
 
 class ProviderTimeoutError(RoutingProviderError):
-    """The provider did not answer in time."""
+    pass
 
 
 class ProviderConnectionError(RoutingProviderError):
-    """The provider could not be reached."""
+    pass
 
 
 class ProviderResponseError(RoutingProviderError):
-    """The provider answered with a malformed or incomplete payload."""
+    pass
 
 
 class ProviderRequestError(RoutingProviderError):
-    """The provider rejected the request (other 4xx/5xx)."""
-
     def __init__(self, message: str, *, status_code: int | None = None, code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
@@ -43,12 +38,12 @@ class ProviderRequestError(RoutingProviderError):
 
 
 class AlternativeRoutesUnavailable(ProviderRequestError):
-    """The provider cannot compute alternative routes for this request (e.g. distance limit)."""
+    """E.g. the trip is over the provider's distance limit for alternatives."""
 
 
 class NoRouteFound(ProviderRequestError):
-    """The provider could not find a route between the given points."""
+    """The provider found no road connection between the points."""
 
 
 class NoRoutesFoundError(RoutingError):
-    """No valid route could be produced for the trip."""
+    """The planner couldn't produce any valid route (after validation and fallbacks)."""

@@ -39,17 +39,16 @@ class ThresholdBoundaryTests(TestCase):
 class LoadRuleTests(TestCase):
     def test_override_boundaries(self):
         cases = [
-            # (wind, load, expected override)
-            (34.99, 100_000, None),            # below 35 mph: load irrelevant
-            (35, 40_000, None),                # load must be strictly above 40,000
+            (34.99, 100_000, None),
+            (35, 40_000, None),
             (35, 40_001, L.SEVERE),
             (44.99, 40_001, L.SEVERE),
             (44.99, 40_000, None),
-            (45, 30_000, None),                # strictly above 30,000
+            (45, 30_000, None),
             (45, 30_001, L.NO_TRAVEL),
             (54.99, 30_001, L.NO_TRAVEL),
             (54.99, 30_000, None),
-            (60, 0, None),                     # >=55 is handled by the wind band, not a load rule
+            (60, 0, None),  # 55+ is No Travel from the wind band itself, not a load rule
         ]
         for wind, load, expected in cases:
             with self.subTest(wind=wind, load=load):
@@ -78,7 +77,6 @@ class PrecedenceTests(TestCase):
         self.assertEqual((r.wind_level, r.rain_level, r.snow_level, r.level), (L.LOW, L.HIGH, L.SEVERE, L.SEVERE))
 
     def test_override_raises_but_never_lowers(self):
-        # Rain alone is No Travel; a Severe load override must not lower it.
         r = assess_conditions(wind_mph=40, rain_in_hr=1.5, snow_in_hr=0, load_lb=50_000)
         self.assertEqual(r.load_override, L.SEVERE)
         self.assertEqual(r.level, L.NO_TRAVEL)

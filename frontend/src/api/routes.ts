@@ -3,13 +3,13 @@ import { apiClient } from './client'
 import type { AssessRequest, AssessResponse } from './types'
 
 export type ApiErrorKind =
-  | 'validation' // 400: the backend rejected a field
-  | 'no_route' // 422: inputs valid but nothing drivable
-  | 'provider' // 502/503/504: routing or weather provider failed or timed out upstream
+  | 'validation' // 400
+  | 'no_route' // 422
+  | 'provider' // 502/503/504
   | 'server' // 500
-  | 'network' // no response at all
-  | 'timeout' // no response in time
-  | 'unexpected' // a response we cannot interpret
+  | 'network'
+  | 'timeout'
+  | 'unexpected'
   | 'cancelled'
 
 export class ApiError extends Error {
@@ -27,14 +27,13 @@ export class ApiError extends Error {
     this.fields = extra.fields
   }
 
-  /** Whether trying the same request again could plausibly succeed. */
   get retryable(): boolean {
     return this.kind === 'provider' || this.kind === 'server' || this.kind === 'network' || this.kind === 'timeout'
   }
 }
 
 const ASSESS_PATH = '/api/v1/routes/assess/'
-// Planning three routes and fetching weather takes several seconds, longer than the default client timeout.
+// Route planning plus weather lookups can take well past the default client timeout.
 export const ASSESS_TIMEOUT_MS = 120_000
 
 interface ErrorBody {
@@ -85,7 +84,6 @@ export function toApiError(err: unknown): ApiError {
 
 export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
-/** Reject payloads that do not have the shape the UI relies on, instead of crashing while rendering. */
 export function parseAssessResponse(data: unknown): AssessResponse {
   const bad = () => new ApiError('unexpected', 'The server returned a response this app cannot read.')
   if (!isRecord(data) || !Array.isArray(data.routes) || !isRecord(data.recommendation) || !isRecord(data.method)) {

@@ -51,7 +51,7 @@ class RankingTests(TestCase):
 
     def test_fewest_severe_miles_beats_everything_below_it(self):
         a = summary((L.SEVERE, 5), (L.LOW, 95))
-        b = summary((L.SEVERE, 1), (L.HIGH, 99))  # fewer severe, but lots of high
+        b = summary((L.SEVERE, 1), (L.HIGH, 99))
         self.assertEqual(self.rank([a, b], [100, 9999]).order, (1, 0))
 
     def test_then_fewest_high_miles(self):
@@ -72,7 +72,7 @@ class RankingTests(TestCase):
     def test_float_noise_does_not_break_ties(self):
         a = summary((L.SEVERE, 10.0), (L.LOW, 90))
         b = summary((L.SEVERE, 10.0000001), (L.LOW, 90))
-        self.assertEqual(self.rank([a, b], [5000, 4000]).order, (1, 0))  # tie on risk -> faster wins
+        self.assertEqual(self.rank([a, b], [5000, 4000]).order, (1, 0))
 
     def test_no_travel_route_is_never_recommended_even_if_best_otherwise(self):
         risky = summary((L.NO_TRAVEL, 1), (L.LOW, 99))
@@ -86,7 +86,7 @@ class RankingTests(TestCase):
         b = summary((L.NO_TRAVEL, 5), (L.LOW, 95))
         r = self.rank([a, b])
         self.assertIsNone(r.recommended)
-        self.assertEqual(r.order, (1, 0))  # least No Travel miles first, for display only
+        self.assertEqual(r.order, (1, 0))  # order still matters for display
 
     def test_complete_data_ranks_ahead_of_gaps(self):
         clean = summary((L.MODERATE, 100))

@@ -21,7 +21,7 @@ function httpError(status: number, data: unknown): AxiosError {
   return new AxiosError(`HTTP ${status}`, 'ERR_BAD_RESPONSE', config, {}, { status, data, statusText: '', headers: {}, config } as AxiosResponse)
 }
 
-// Braces matter: returning the mock from beforeEach would make Vitest call it as a teardown hook.
+// Keep the braces: a returned value from beforeEach is treated as a teardown hook.
 beforeEach(() => {
   post.mockReset()
 })

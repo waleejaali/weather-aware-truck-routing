@@ -72,7 +72,6 @@ export function ErrorPanel({ error, unmapped, onRetry }: { error: ApiError; unma
   )
 }
 
-/** Assumptions, sampling and provider notes that must accompany any recommendation. */
 export function MethodPanel({ data }: { data: AssessResponse }) {
   const { method } = data
   const notes = [...method.routing.notes, ...method.notes]

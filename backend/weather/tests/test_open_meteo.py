@@ -1,5 +1,3 @@
-"""Open-Meteo adapter tests with mocked HTTP. No network."""
-
 from datetime import datetime, timezone
 from unittest import TestCase
 
@@ -58,7 +56,7 @@ class FakeSession:
 
 
 def echo(params, **entry_kwargs):
-    """Respond with one default entry per requested location (list when several, object when one)."""
+    # Open-Meteo returns a bare object for one location and a list for several
     entries = [entry(lat=float(a), lon=float(b), **entry_kwargs)
                for a, b in zip(params["latitude"].split(","), params["longitude"].split(","))]
     return FakeResponse(200, entries if len(entries) > 1 else entries[0])
@@ -75,8 +73,8 @@ class OpenMeteoSuccessTests(TestCase):
         record = series.records[datetime(2026, 10, 14, 1, tzinfo=UTC)]
         self.assertEqual(sorted(series.records), [datetime.fromtimestamp(h, tz=UTC) for h in HOURS])
         self.assertEqual((record.wind_speed_mph, record.wind_gust_mph), (10.0, 20.0))
-        self.assertAlmostEqual(record.rain_in, 0.03)  # rain + showers (liquid only)
-        self.assertEqual(record.snow_in, 0.3)  # inches over the preceding hour == in/hr
+        self.assertAlmostEqual(record.rain_in, 0.03)
+        self.assertEqual(record.snow_in, 0.3)
         self.assertEqual(series.grid, Coordinate(34.05, -118.24))
 
     def test_request_parameters(self):
@@ -91,7 +89,7 @@ class OpenMeteoSuccessTests(TestCase):
         self.assertEqual((p["wind_speed_unit"], p["precipitation_unit"], p["timeformat"]), ("mph", "inch", "unixtime"))
         self.assertEqual((p["start_date"], p["end_date"], p["timezone"]), ("2026-10-14", "2026-10-14", "GMT"))
         self.assertEqual(p["hourly"].split(","), ["wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall"])
-        self.assertNotIn("precipitation", p["hourly"].split(","))  # includes snow water equivalent
+        self.assertNotIn("precipitation", p["hourly"].split(","))  # it folds in snow water equivalent
 
     def test_dates_follow_utc_window(self):
         session = FakeSession(echo)
@@ -105,7 +103,7 @@ class OpenMeteoSuccessTests(TestCase):
         result = provider(session, max_locations_per_request=50).fetch_hourly(locations, START, END)
         self.assertEqual(len(result), 120)
         self.assertEqual([len(c["params"]["latitude"].split(",")) for c in session.calls], [50, 50, 20])
-        self.assertEqual([s.requested for s in result], locations)  # same order
+        self.assertEqual([s.requested for s in result], locations)
 
     def test_duplicate_locations_are_requested_once_but_returned_for_each(self):
         session = FakeSession(echo)
@@ -118,13 +116,13 @@ class OpenMeteoSuccessTests(TestCase):
         self.assertEqual(result[0].records, result[2].records)
 
     def test_null_values_become_none_and_missing_hours_are_absent(self):
-        times = [HOURS[0], HOURS[2]]  # 01:00 missing entirely
+        times = [HOURS[0], HOURS[2]]
         session = FakeSession(lambda p: FakeResponse(200, entry(times, wind_speed_10m=[None, 12.0], showers=[None, 0.0])))
         [series] = provider(session).fetch_hourly([Coordinate(34, -118)], START, END)
         self.assertNotIn(datetime(2026, 10, 14, 1, tzinfo=UTC), series.records)
         first = series.records[datetime(2026, 10, 14, 0, tzinfo=UTC)]
         self.assertIsNone(first.wind_speed_mph)
-        self.assertIsNone(first.rain_in)  # one liquid component missing -> not assumed zero
+        self.assertIsNone(first.rain_in)
         self.assertEqual(first.snow_in, 0.3)
 
     def test_available_window(self):

@@ -3,16 +3,12 @@ import type { RiskKey } from '../api/types'
 export interface RiskMeta {
   key: RiskKey | 'unknown'
   label: string
-  /** A shape glyph so level is never conveyed by colour alone. */
-  symbol: string
-  /** Strong colour for map lines/markers. */
+  symbol: string // so risk isn't conveyed by colour alone
   color: string
-  /** Soft background and dark text for badges (contrast >= 4.5:1). */
-  bg: string
+  bg: string // bg/fg pairs keep badge text at >= 4.5:1 contrast
   fg: string
 }
 
-/** Halo colour marking the recommended route (only used when the backend recommends one). */
 export const RECOMMENDED_COLOR = '#1d4ed8'
 
 export const RISK_ORDER: readonly RiskKey[] = ['low', 'moderate', 'high', 'severe', 'no_travel']

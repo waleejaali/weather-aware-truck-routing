@@ -1,10 +1,3 @@
-"""OpenRouteService (ORS) adapter. All ORS-specific request/response knowledge lives here.
-
-Endpoint: POST {base}/v2/directions/{profile}/geojson, key sent in the Authorization header
-(never in the URL, so it cannot leak into logs). Documented hosted-API limits:
-https://openrouteservice.org/restrictions/ (alternative routes: <= 100 km, <= 3 routes).
-"""
-
 import math
 from collections.abc import Sequence
 from typing import Any
@@ -25,20 +18,21 @@ from ..errors import (
 from ..types import Coordinate, Route
 from .base import RoutingProvider
 
-MAX_WAYPOINTS = 50  # documented hosted limit
-ENDPOINT_SNAP_RADIUS_M = 1000  # how far origin/destination may snap to the nearest road
-VIA_SNAP_RADIUS_M = 20_000  # intermediate points are synthetic, so allow a wider search
-ALTERNATIVE_WEIGHT_FACTOR = 1.4  # ORS default: alternatives up to 1.4x the optimal cost
-ALTERNATIVE_SHARE_FACTOR = 0.6  # ORS default: alternatives share up to 60% with the optimal route
+# Hosted API limits: https://openrouteservice.org/restrictions/
+MAX_WAYPOINTS = 50
+ENDPOINT_SNAP_RADIUS_M = 1000
+VIA_SNAP_RADIUS_M = 20_000  # via points are synthetic and may be far from any road
+ALTERNATIVE_WEIGHT_FACTOR = 1.4  # ORS defaults
+ALTERNATIVE_SHARE_FACTOR = 0.6
 
-# ORS error codes (see ORS error code documentation); confirmed only via live testing.
+# Confirmed against the live API.
 _CODE_PARAMETERS_EXCEED_LIMITS = 2004
 _CODES_NO_ROUTE = {2009, 2010}
 
 
 class OpenRouteServiceProvider(RoutingProvider):
     name = "openrouteservice"
-    alternatives_max_distance_m = 100_000.0
+    alternatives_max_distance_m = 100_000.0  # ORS refuses alternative_routes beyond 100 km
 
     def __init__(
         self,
@@ -54,7 +48,7 @@ class OpenRouteServiceProvider(RoutingProvider):
         self.profile = profile
         self._timeout_s = timeout_s
         self._session = session or requests.Session()
-        self.request_count = 0  # HTTP requests sent by this instance
+        self.request_count = 0
 
     def directions(self, waypoints: Sequence[Coordinate], *, preference: str = "recommended") -> Route:
         body = self._body(waypoints)
@@ -72,8 +66,6 @@ class OpenRouteServiceProvider(RoutingProvider):
             "share_factor": ALTERNATIVE_SHARE_FACTOR,
         }
         return self._parse_routes(self._post(body, alternatives=True))
-
-    # -- request -----------------------------------------------------------------------------
 
     def _body(self, waypoints: Sequence[Coordinate]) -> dict[str, Any]:
         if not 2 <= len(waypoints) <= MAX_WAYPOINTS:
@@ -94,7 +86,7 @@ class OpenRouteServiceProvider(RoutingProvider):
             )
         url = f"{self._base_url}/v2/directions/{self.profile}/geojson"
         headers = {
-            "Authorization": self._api_key,
+            "Authorization": self._api_key,  # header rather than query string so the key stays out of logs
             "Content-Type": "application/json",
             "Accept": "application/geo+json, application/json",
         }
@@ -132,8 +124,6 @@ class OpenRouteServiceProvider(RoutingProvider):
             return AlternativeRoutesUnavailable(detail, status_code=status, code=code)
         return ProviderRequestError(detail, status_code=status, code=code)
 
-    # -- response ----------------------------------------------------------------------------
-
     def _parse_routes(self, payload: dict[str, Any]) -> list[Route]:
         features = payload.get("features")
         if not isinstance(features, list):
@@ -147,7 +137,7 @@ class OpenRouteServiceProvider(RoutingProvider):
             distance, duration = summary["distance"], summary["duration"]
             if feature["geometry"]["type"] != "LineString":
                 raise ValueError("geometry is not a LineString")
-            points = tuple(Coordinate(float(c[1]), float(c[0])) for c in coordinates)
+            points = tuple(Coordinate(float(c[1]), float(c[0])) for c in coordinates)  # [lon, lat]
             if isinstance(distance, bool) or isinstance(duration, bool):
                 raise ValueError("summary values must be numbers")
             distance, duration = float(distance), float(duration)
@@ -159,7 +149,6 @@ class OpenRouteServiceProvider(RoutingProvider):
 
 
 def _error_details(response: requests.Response) -> tuple[int | None, str]:
-    """Extract (code, message) from an ORS error body, tolerating other shapes."""
     try:
         error = response.json().get("error")
     except (ValueError, AttributeError):

@@ -1,8 +1,4 @@
-"""Live routing check against the real provider. Needs ORS_API_KEY in .env; not part of the test suite.
-
-    python manage.py check_routing
-    python manage.py check_routing --origin 34.0522,-118.2437 --destination 32.7767,-96.7970
-"""
+# Hits the live routing provider (needs ORS_API_KEY); not part of the test suite.
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -13,9 +9,8 @@ from routing.services.route_planner import PlannerConfig, RoutePlanner
 from routing.types import Coordinate
 from routing.validation import ValidationConfig
 
-# Defaults are just city-center coordinates for a convenient long trip (Los Angeles -> Dallas).
-DEFAULT_ORIGIN = "34.0522,-118.2437"
-DEFAULT_DESTINATION = "32.7767,-96.7970"
+DEFAULT_ORIGIN = "34.0522,-118.2437"  # Los Angeles
+DEFAULT_DESTINATION = "32.7767,-96.7970"  # Dallas
 METERS_PER_MILE = 1609.344
 
 

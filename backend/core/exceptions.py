@@ -1,11 +1,3 @@
-"""One JSON error shape for the whole API.
-
-    {"error": {"code": "<machine_code>", "message": "<human text>", "fields": {"path.to.field": ["..."]}}}
-
-`fields` appears only for validation errors. Messages are generic: no stack traces, provider
-payloads, credentials or other internals.
-"""
-
 from rest_framework import exceptions
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
@@ -28,7 +20,7 @@ def error_response(code: str, message: str, status: int, fields: dict | None = N
 def api_exception_handler(exc, context):
     response = drf_exception_handler(exc, context)
     if response is None:
-        return None  # not an API exception; the view decides how to report it
+        return None
     code, message = _CODES.get(type(exc), ("request_error", "The request could not be processed."))
     return error_response(code, message, response.status_code)
 

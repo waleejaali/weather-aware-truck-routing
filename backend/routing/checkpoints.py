@@ -1,16 +1,3 @@
-"""Checkpoint sampling and arrival-time estimation along a route. Pure functions.
-
-Checkpoints are placed every `interval_miles` of route distance starting at the origin, plus the
-destination. A regular checkpoint that would fall within one mile (or half an interval, if smaller)
-of the destination is dropped so the destination is never duplicated by a near neighbour.
-Raw geometry vertices are never used as checkpoints.
-
-Arrival time uses constant average speed over the whole route:
-    eta = departure + route.duration_s * (distance_along_route / route.distance_m)
-The routing provider gives one duration per route, so per-segment speed variation (traffic, hills,
-urban stretches) is not modelled; this is the main limitation of the ETA.
-"""
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -23,8 +10,8 @@ METERS_PER_MILE = 1609.344
 @dataclass(frozen=True)
 class Checkpoint:
     index: int
-    distance_m: float  # along the route, in the provider's distance scale
-    fraction: float  # distance_m / route.distance_m, 0-1
+    distance_m: float  # in the provider's distance scale, not the geometry's
+    fraction: float
     coordinate: Coordinate
     segment_m: float  # road this checkpoint stands for (half-way to each neighbour)
 
@@ -43,6 +30,7 @@ def checkpoint_distances_m(total_m: float, interval_miles: float) -> list[float]
     if total_m <= 0:
         raise ValueError("route distance must be positive")
     interval = interval_miles * METERS_PER_MILE
+    # Drop a regular checkpoint that would land right next to the destination.
     min_gap = min(METERS_PER_MILE, interval / 2)
     distances = [0.0]
     k = 1
@@ -56,7 +44,7 @@ def checkpoint_distances_m(total_m: float, interval_miles: float) -> list[float]
 def sample_checkpoints(route: Route, interval_miles: float) -> list[Checkpoint]:
     total = route.distance_m
     distances = checkpoint_distances_m(total, interval_miles)
-    # The provider's distance and the geometry's haversine length differ slightly; map between them.
+    # The provider's distance and the geometry's haversine length differ slightly.
     scale = path_length_m(route.points) / total
     coordinates = points_at_distances(route.points, [d * scale for d in distances])
     coordinates[0], coordinates[-1] = route.points[0], route.points[-1]
@@ -77,7 +65,7 @@ def sample_checkpoints(route: Route, interval_miles: float) -> list[Checkpoint]:
 
 
 def estimate_arrival(departure: datetime, route: Route, checkpoint: Checkpoint) -> datetime:
-    """Estimated arrival (UTC) at a checkpoint. departure must be timezone-aware."""
+    # Assumes constant average speed: ORS only gives one duration for the whole route.
     if departure.tzinfo is None or departure.utcoffset() is None:
         raise ValueError("departure must be timezone-aware")
     return departure + timedelta(seconds=route.duration_s * checkpoint.fraction)

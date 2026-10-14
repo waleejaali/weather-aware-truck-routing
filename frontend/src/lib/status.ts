@@ -5,7 +5,6 @@ export type Tone = 'success' | 'caution' | 'danger' | 'neutral'
 export interface StatusInfo {
   title: string
   tone: Tone
-  /** Our own framing; the backend's explanation is always shown alongside it. */
   note: string
   hasRecommendation: boolean
 }
@@ -14,7 +13,7 @@ const INFO: Record<RecommendationStatus, StatusInfo> = {
   recommended: {
     title: 'Recommended route',
     tone: 'success',
-    note: '', // the backend's explanation already carries the "not a guarantee of safety" caveat
+    note: '', // backend explanation already includes the safety caveat
     hasRecommendation: true,
   },
   recommended_incomplete_weather: {

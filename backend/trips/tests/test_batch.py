@@ -1,5 +1,3 @@
-"""POST /api/v1/routes/assess-batch/ and the route/weather reuse behind it. Providers are faked; no network."""
-
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
@@ -23,8 +21,8 @@ from .test_assessment import CALM, FakeWeatherProvider
 BATCH_URL = "/api/v1/routes/assess-batch/"
 SINGLE_URL = "/api/v1/routes/assess/"
 D0 = "2026-10-14T08:00:00-05:00"  # 13:00Z
-D1 = "2026-10-14T14:00:00-05:00"  # +6 h
-D2 = "2026-10-14T20:00:00-05:00"  # +12 h
+D1 = "2026-10-14T14:00:00-05:00"
+D2 = "2026-10-14T20:00:00-05:00"
 
 
 def batch_payload(departures=(D0, D1, D2), **changes):
@@ -39,7 +37,6 @@ def batch_payload(departures=(D0, D1, D2), **changes):
 
 
 def storm_only_for_first_departure(c, h):
-    """A 50 mph storm on the straight baseline's middle band, but only 20:00Z Oct 14 - 02:00Z Oct 15."""
     on_baseline = abs(c.lat - straight_line_lat(c.lon)) < 0.1 and -110 < c.lon < -100
     in_storm_window = datetime(2026, 10, 14, 20, tzinfo=timezone.utc) <= h <= datetime(2026, 10, 15, 2, tzinfo=timezone.utc)
     return wind(50.0) if on_baseline and in_storm_window else CALM
@@ -85,7 +82,6 @@ class BatchContractTests(BatchTestCase):
         self.assertEqual(data["method"]["wind_metric"], "sustained")
         self.assertEqual(data["method"]["weather"]["attribution"]["license"], "CC BY 4.0")
 
-        # Geometry appears once, in GeoJSON [lon, lat] order, and never inside per-departure routes.
         self.assertEqual(len(data["routes"]), 3)
         for shared in data["routes"]:
             self.assertEqual(shared["geometry"]["type"], "LineString")
@@ -106,7 +102,6 @@ class BatchContractTests(BatchTestCase):
             first_etas.append(etas[0])
         self.assertEqual(len(set(first_etas)), 3)
 
-        # Same route, different time: the storm hits the baseline only when departing at D0.
         baselines = {}
         for result in data["results"]:
             shared_id = next(s["id"] for s in data["routes"] if s["source"] == "baseline")
@@ -154,7 +149,7 @@ class BatchContractTests(BatchTestCase):
             for cp in route["checkpoints"]:
                 self.assertEqual(cp["weather_status"], "unavailable")
                 self.assertTrue(all(v is None for v in cp["weather"].values()))
-        self.assertEqual(len(self.weather.calls), 1)  # the out-of-range departure did not widen the fetch
+        self.assertEqual(len(self.weather.calls), 1)
 
     def test_batch_of_the_maximum_size_works(self):
         departures = [(NOW + timedelta(days=1, hours=i)).isoformat() for i in range(MAX_BATCH_DEPARTURES)]
@@ -172,7 +167,7 @@ class ReuseTests(BatchTestCase):
 
         self.routing = FakeRoutingProvider()
         data = self.ok_batch()
-        self.assertEqual(len(self.routing.calls), calls_per_plan)  # 3 departures, 1 plan (3 separate requests would use 3x)
+        self.assertEqual(len(self.routing.calls), calls_per_plan)
         self.assertEqual(data["diagnostics"]["route_cache"], "miss")
         self.assertEqual(data["diagnostics"]["routing_provider_requests"], calls_per_plan)
 
@@ -181,7 +176,7 @@ class ReuseTests(BatchTestCase):
         self.assertEqual(len(self.weather.calls), 1)
         self.assertEqual(data["diagnostics"]["weather_provider_requests"], 1)
         locations, start, end = self.weather.calls[0]
-        self.assertEqual(len(locations), len(set(locations)))  # deduplicated checkpoint coordinates
+        self.assertEqual(len(locations), len(set(locations)))
         longest = max(r["duration_seconds"] for r in data["routes"])
         self.assertLessEqual(start, datetime(2026, 10, 14, 13, tzinfo=timezone.utc))
         self.assertGreaterEqual(end, datetime(2026, 10, 15, 1, tzinfo=timezone.utc) + timedelta(seconds=longest))
@@ -190,7 +185,7 @@ class ReuseTests(BatchTestCase):
         self.ok_batch()
         planned = len(self.routing.calls)
         data = self.ok_batch()
-        self.assertEqual(len(self.routing.calls), planned)  # no routing provider call at all
+        self.assertEqual(len(self.routing.calls), planned)
         self.assertEqual(data["diagnostics"], {"route_cache": "hit", "routing_provider_requests": 0, "weather_provider_requests": 1})
 
     def test_load_interval_and_departures_do_not_affect_the_route_cache_key(self):
@@ -233,7 +228,7 @@ class ReuseTests(BatchTestCase):
     def test_cached_plans_expire(self):
         cache = caches["routes"]
         provider = FakeRoutingProvider()
-        # Django computes the expiry in cache.backends.base and checks it in cache.backends.locmem: patch one clock for both.
+        # Django sets expiry in backends.base but checks it in backends.locmem, so both need the fake clock
         fake_time = mock.Mock()
         with mock.patch("django.core.cache.backends.locmem.time", fake_time), mock.patch("django.core.cache.backends.base.time", fake_time):
             fake_time.time.return_value = 1_000.0
@@ -250,7 +245,7 @@ class ReuseTests(BatchTestCase):
             self.assertEqual(self.post_batch().status_code, 504)
         self.routing = FakeRoutingProvider()
         data = self.ok_batch()
-        self.assertEqual(data["diagnostics"]["route_cache"], "miss")  # the failure left nothing behind
+        self.assertEqual(data["diagnostics"]["route_cache"], "miss")
 
     def test_a_broken_cache_degrades_to_planning_every_time(self):
         class BrokenCache:
@@ -315,7 +310,7 @@ class BatchFailureTests(BatchTestCase):
         self.assertEqual(response.status_code, 504)
         body = strict_json(response)
         self.assertEqual(body["error"]["code"], "routing_timeout")
-        self.assertNotIn("results", body)  # never a successful-looking empty batch
+        self.assertNotIn("results", body)
 
     def test_shared_weather_failure_fails_the_batch_without_internals(self):
         self.weather = FakeWeatherProvider(error=WeatherTimeoutError("took 20s secret"))
@@ -341,7 +336,7 @@ class BatchFailureTests(BatchTestCase):
         results = strict_json(response)["results"]
         self.assertEqual([r["ok"] for r in results], [True, False, True])
         self.assertEqual(results[1]["error"], {"code": "assessment_failed", "message": "This departure could not be assessed."})
-        self.assertEqual(results[1]["departure_datetime_input"], D1)  # the failed departure is still identified
+        self.assertEqual(results[1]["departure_datetime_input"], D1)
         self.assertNotIn("routes", results[1])
         self.assertNotIn("SECRET-INTERNAL-DETAIL", response.content.decode())
 
@@ -372,10 +367,10 @@ class BackwardCompatibilityTests(BatchTestCase):
         first = self.single(D0)
         planned = len(self.routing.calls)
         self.single(D0)
-        self.assertEqual(len(self.routing.calls), planned * 2)  # still plans on every request, as before
+        self.assertEqual(len(self.routing.calls), planned * 2)
         self.assertIn("departure_datetime", first["request"])
         self.assertNotIn("results", first)
-        self.assertTrue(all("geometry" in r for r in first["routes"]))  # geometry still inline
+        self.assertTrue(all("geometry" in r for r in first["routes"]))
         self.assertNotIn("diagnostics", first)
 
 
@@ -410,7 +405,7 @@ class PrimedWeatherProviderTests(SimpleTestCase):
         primed = PrimedWeatherProvider(inner)
         series = primed.fetch_hourly([Coordinate(1.0, 1.0)], self.START, self.START + timedelta(hours=2))
         self.assertIsInstance(series[0], HourlySeries)
-        self.assertEqual(len(inner.calls), 1)  # delegated to the real provider
+        self.assertEqual(len(inner.calls), 1)
 
     def test_delegates_name_attribution_and_window(self):
         inner = self.inner()

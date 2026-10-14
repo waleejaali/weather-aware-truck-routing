@@ -50,7 +50,7 @@ function App() {
   const loading = phase === 'loading'
   const tz = useMemo(() => timeZoneLabel(), [])
 
-  // The route being inspected: the user's choice if it still exists, else the recommended route, else the best-ranked.
+  // A previous choice may not exist in a new result, so fall back to recommended, then first.
   const selectedId =
     data && chosenId && data.routes.some((r) => r.id === chosenId)
       ? chosenId
@@ -58,7 +58,6 @@ function App() {
         ? (data.recommendation.recommended_route_id ?? data.routes[0]?.id ?? null)
         : null
 
-  // Backend field errors (HTTP 400) shown on the matching inputs until the user edits them.
   const server = useMemo(
     () => (error?.kind === 'validation' && error.fields ? mapServerFieldErrors(error.fields) : { errors: {}, unmapped: [] as string[] }),
     [error],

@@ -1,11 +1,3 @@
-"""Route planning strategy: provider alternatives first, waypoint-constrained fallback second.
-
-Provider-agnostic: talks only to the RoutingProvider interface and the pure validation module.
-Every candidate, whatever its source, goes through the same integrity, detour and
-duplicate checks. The result is honest: "complete" only if the requested number of distinct,
-valid routes was found, otherwise "partial" (with notes explaining why), or an error if none.
-"""
-
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 
@@ -21,7 +13,7 @@ from ..providers.base import RoutingProvider
 from ..types import Coordinate, Route
 from ..validation import ValidationConfig, integrity_problems, rejection_reason
 
-# Failures that make further requests pointless; they propagate instead of triggering fallbacks.
+# No point trying fallbacks after these; every further request would fail the same way.
 _FATAL_ERRORS = (ProviderConfigurationError, ProviderAuthError)
 
 STRATEGY_ALTERNATIVE = "provider_alternative"
@@ -33,11 +25,9 @@ STRATEGY_VIA = "via_waypoint"
 @dataclass(frozen=True)
 class PlannerConfig:
     target_route_count: int = 3
-    # Upper bound on provider calls per plan (protects the free-tier quota).
-    max_provider_requests: int = 10
+    max_provider_requests: int = 10  # keeps us well inside the ORS free-tier quota
     validation: ValidationConfig = field(default_factory=ValidationConfig)
-    # Fallback via-point placement: fractions along the baseline, and sideways offsets
-    # = clamp(offset_ratio * baseline_distance, min, max) * multiplier, tried on both sides.
+    # Via offset = clamp(ratio * baseline_distance, min, max) * multiplier, tried on both sides.
     via_fractions: tuple[float, ...] = (0.5, 0.3, 0.7)
     via_offset_multipliers: tuple[float, ...] = (1.0, 0.5, 1.5)
     via_offset_ratio: float = 0.12
@@ -48,11 +38,11 @@ class PlannerConfig:
 @dataclass(frozen=True)
 class RoutePlan:
     routes: tuple[Route, ...]  # fastest first
-    status: str  # "complete" (target count reached) or "partial"
+    status: str  # "complete" or "partial"
     provider: str
     profile: str
     requested_count: int
-    notes: tuple[str, ...]  # human-readable account of what was tried, skipped or rejected
+    notes: tuple[str, ...]
 
     @property
     def is_complete(self) -> bool:
@@ -96,13 +86,11 @@ class RoutePlanner:
             notes=tuple(state.notes),
         )
 
-    # -- strategy 1: provider alternatives ------------------------------------------------------
-
     def _try_provider_alternatives(self, state: _PlanState) -> None:
         limit = self._provider.alternatives_max_distance_m
         straight_line = haversine_m(state.origin, state.destination)
         if limit is not None and straight_line > limit:
-            # The route can never be shorter than the straight line, so the request would be refused.
+            # The road distance is at least the straight line, so the provider would refuse anyway.
             state.notes.append(
                 f"Provider alternatives skipped: trip is at least {straight_line / 1000:.0f} km, "
                 f"over the provider's {limit / 1000:.0f} km limit for alternative routes."
@@ -123,15 +111,13 @@ class RoutePlanner:
             state.notes.append(f"Provider returned {len(routes)} alternative route(s), expected {self._config.target_route_count}.")
         self._accept_batch(state, routes, STRATEGY_ALTERNATIVE)
 
-    # -- strategy 2: waypoint-constrained fallback -----------------------------------------------
-
     def _fill_with_waypoint_routes(self, state: _PlanState) -> None:
         if state.baseline is None:
-            # No baseline from alternatives: this request must succeed, so errors propagate.
+            # Without a baseline there's nothing to fall back to, so let errors here propagate.
             route = self._call(state, lambda: self._provider.directions([state.origin, state.destination]))
             self._accept_batch(state, [route], STRATEGY_BASELINE)
             if state.baseline is None:
-                return  # baseline failed validation; notes explain why
+                return
 
         for strategy, request in self._fallback_candidates(state):
             if len(state.accepted) >= self._config.target_route_count:
@@ -168,8 +154,6 @@ class RoutePlanner:
                     via = destination_point(anchor, (bearing + side) % 360, offset_base * multiplier)
                     yield STRATEGY_VIA, lambda via=via: self._provider.directions([origin, via, destination])
 
-    # -- shared ---------------------------------------------------------------------------------
-
     def _call(self, state: _PlanState, request: Callable):
         state.requests_used += 1
         return request()
@@ -185,7 +169,7 @@ class RoutePlanner:
         valid.sort(key=lambda r: r.duration_s)
 
         if state.baseline is None and valid:
-            # Fastest valid route anchors the detour check; later candidates are measured against it.
+            # Detour checks for later candidates are measured against the fastest valid route.
             state.baseline = valid[0]
         for route in valid:
             reason = rejection_reason(route, state.accepted, state.baseline, self._config.validation)

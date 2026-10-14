@@ -4,7 +4,6 @@ import { sourceLabel } from '../lib/status'
 import { formatLocalDateTime } from '../lib/time'
 import { RiskBadge, RiskMilesBar } from './RiskBadge'
 
-
 interface Props {
   route: RouteAssessment
   selected: boolean

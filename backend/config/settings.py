@@ -1,5 +1,3 @@
-"""Django settings. Configuration comes from environment variables (see ../.env.example)."""
-
 import os
 from pathlib import Path
 
@@ -8,7 +6,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BASE_DIR.parent
 
-# A single .env at the repository root is shared by backend and frontend.
+# One .env at the repo root, shared with the frontend.
 load_dotenv(REPO_ROOT / ".env")
 
 
@@ -21,7 +19,6 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() in ("1", "true", "yes")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
     if DEBUG:
-        # Throwaway key so local development works with an empty .env.
         SECRET_KEY = "dev-only-insecure-key"
     else:
         raise RuntimeError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is not true.")
@@ -42,15 +39,13 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    # Route geometries are large JSON; gzip cuts them roughly 5-10x.
-    "django.middleware.gzip.GZipMiddleware",
+    "django.middleware.gzip.GZipMiddleware",  # route geometries are big; gzip shrinks them ~5-10x
     "django.middleware.common.CommonMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 
-# Persistence is not part of this project, so no database is configured.
 DATABASES = {}
 
 CORS_ALLOWED_ORIGINS = _env_list("FRONTEND_URL", "http://localhost:5173")
@@ -58,33 +53,27 @@ CORS_ALLOWED_ORIGINS = _env_list("FRONTEND_URL", "http://localhost:5173")
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
-    # No auth or DB-backed sessions in this app.
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": [],
     "UNAUTHENTICATED_USER": None,
     "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
 }
 
-# External API configuration, consumed by the provider adapters.
 ORS_API_KEY = os.environ.get("ORS_API_KEY", "")
 ORS_BASE_URL = os.environ.get("ORS_BASE_URL", "https://api.openrouteservice.org")
-# Vehicle profile is explicit: requests never silently fall back to another profile.
 ORS_PROFILE = os.environ.get("ORS_PROFILE", "driving-hgv")
 ORS_TIMEOUT_SECONDS = float(os.environ.get("ORS_TIMEOUT_SECONDS", "30"))
 OPEN_METEO_BASE_URL = os.environ.get("OPEN_METEO_BASE_URL", "https://api.open-meteo.com")
 WEATHER_TIMEOUT_SECONDS = float(os.environ.get("WEATHER_TIMEOUT_SECONDS", "20"))
-# Which wind value drives risk: "sustained" (wind_speed_10m) or "gust" (wind_gusts_10m).
-WEATHER_WIND_METRIC = os.environ.get("WEATHER_WIND_METRIC", "sustained")
+WEATHER_WIND_METRIC = os.environ.get("WEATHER_WIND_METRIC", "sustained")  # "sustained" or "gust"
 
-# Planned routes (geometry) are cached briefly because they depend only on origin, destination and the routing
-# provider's configuration. Per-process memory, no database; entries are large, so keep the count small.
 ROUTE_CACHE_TTL_SECONDS = int(os.environ.get("ROUTE_CACHE_TTL_SECONDS", "900"))  # 0 disables the cache
 CACHES = {
     "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
     "routes": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "planned-routes",
-        "OPTIONS": {"MAX_ENTRIES": 20},
+        "OPTIONS": {"MAX_ENTRIES": 20},  # entries hold full geometries, so keep this small
     },
 }
 

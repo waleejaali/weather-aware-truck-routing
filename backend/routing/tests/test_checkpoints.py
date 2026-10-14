@@ -20,7 +20,7 @@ class CheckpointDistanceTests(TestCase):
         self.assertEqual(miles(checkpoint_distances_m(110 * MILE, 25)), [0, 25, 50, 75, 100, 110])
 
     def test_checkpoint_near_the_end_is_dropped_not_duplicated(self):
-        # 100 mi would sit 0.3 mi before the destination at 100.3 mi.
+        # 100 mi is only 0.3 mi short of the end, too close to keep
         self.assertEqual(miles(checkpoint_distances_m(100.3 * MILE, 25)), [0, 25, 50, 75, 100.3])
 
     def test_route_ending_exactly_on_an_interval(self):
@@ -42,11 +42,11 @@ class CheckpointDistanceTests(TestCase):
 
 class SampleCheckpointTests(TestCase):
     def setUp(self):
-        self.route = make_route(LOS_ANGELES, DALLAS)  # ~1,236 mi synthetic straight line
+        self.route = make_route(LOS_ANGELES, DALLAS)  # ~1,236 mi
 
     def test_not_one_checkpoint_per_geometry_vertex(self):
         self.assertEqual(len(self.route.points), 80)
-        self.assertEqual(len(sample_checkpoints(self.route, 50)), 26)  # 0,50,...,1200 + end
+        self.assertEqual(len(sample_checkpoints(self.route, 50)), 26)
 
     def test_endpoints_are_exact_and_checkpoints_are_ordered_without_duplicates(self):
         cps = sample_checkpoints(self.route, 25)
@@ -60,7 +60,6 @@ class SampleCheckpointTests(TestCase):
         cps = sample_checkpoints(self.route, 25)
         straight_total = haversine_m(LOS_ANGELES, DALLAS)
         for cp in cps[1:-1]:
-            # Straight-line geometry: distance from the start matches distance along the route.
             self.assertAlmostEqual(
                 haversine_m(LOS_ANGELES, cp.coordinate) / straight_total, cp.fraction, delta=0.002
             )
@@ -68,7 +67,7 @@ class SampleCheckpointTests(TestCase):
     def test_segments_partition_the_route(self):
         cps = sample_checkpoints(self.route, 25)
         self.assertAlmostEqual(sum(cp.segment_m for cp in cps), self.route.distance_m, places=3)
-        self.assertAlmostEqual(cps[0].segment_miles, 12.5)  # half an interval each side of an interior point
+        self.assertAlmostEqual(cps[0].segment_miles, 12.5)
         self.assertAlmostEqual(cps[1].segment_miles, 25.0)
 
     def test_provider_distance_differs_from_geometry_length(self):
@@ -92,12 +91,12 @@ class ArrivalTimeTests(TestCase):
         cps = sample_checkpoints(self.route, 50)
         etas = [estimate_arrival(DEPARTURE, self.route, cp) for cp in cps]
         self.assertEqual(etas[0], DEPARTURE)
-        self.assertEqual(etas[1], DEPARTURE + timedelta(hours=1))  # 50 of 200 mi
+        self.assertEqual(etas[1], DEPARTURE + timedelta(hours=1))
         self.assertEqual(etas[2], DEPARTURE + timedelta(hours=2))
         self.assertEqual(etas[-1], DEPARTURE + timedelta(hours=4))
 
     def test_eta_respects_non_uniform_final_leg(self):
-        route = Route(self.route.points, 110 * MILE, 11 * 3600.0)  # 0.1 h per mile
+        route = Route(self.route.points, 110 * MILE, 11 * 3600.0)
         cps = sample_checkpoints(route, 50)
         self.assertEqual(estimate_arrival(DEPARTURE, route, cps[-1]), DEPARTURE + timedelta(hours=11))
         self.assertAlmostEqual((estimate_arrival(DEPARTURE, route, cps[1]) - DEPARTURE).total_seconds(), 5 * 3600)

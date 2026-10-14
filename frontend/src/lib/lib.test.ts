@@ -164,7 +164,7 @@ describe('geometry helpers', () => {
 
     it('splits at the halfway points between checkpoints (the backend segment convention)', () => {
       const segments = riskSegments(route, 'combined')
-      // Checkpoints at mile 0, 50, 100 -> boundaries at 25 and 75 -> longitudes 1 and 3.
+      // miles 0/50/100 -> boundaries at 25 and 75 -> lng 1 and 3
       expect(segments[0].positions[segments[0].positions.length - 1][1]).toBeCloseTo(1, 1)
       expect(segments[1].positions[segments[1].positions.length - 1][1]).toBeCloseTo(3, 1)
     })

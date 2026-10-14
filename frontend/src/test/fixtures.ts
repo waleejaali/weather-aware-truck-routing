@@ -9,7 +9,6 @@ import type {
   RouteAssessment,
 } from '../api/types'
 
-/** Test data shaped like the real API response. These are fixtures, not real routes or weather. */
 export function makeCheckpoint(index: number, over: Partial<Checkpoint> = {}): Checkpoint {
   return {
     index,
@@ -129,7 +128,6 @@ export const VALID_REQUEST: AssessRequest = {
 
 export const LEVELS: RiskKey[] = ['low', 'moderate', 'high', 'severe', 'no_travel']
 
-/** A batch response for the departures in `request`. statusFor(i) gives each result's status, or 'error' for a failed one. */
 export function makeBatch(
   request: BatchRequest,
   statusFor: (index: number) => RecommendationStatus | 'error' = () => 'recommended',

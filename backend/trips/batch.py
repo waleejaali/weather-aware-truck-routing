@@ -1,17 +1,3 @@
-"""Assess several departure times for one trip while planning routes and fetching weather only once.
-
-Why reuse is safe: RoutePlanner.plan() depends only on origin, destination and the routing provider's
-configuration. The ORS request carries coordinates, snap radii and a preference - no departure time,
-no traffic, no truck weight - so the planned geometry and duration are the same whatever the departure,
-load or checkpoint interval. If routing ever starts using any of those, they MUST be added to
-`route_cache_key` below and the reuse in `assess_trip_batch` must be re-examined.
-
-Weather: checkpoint coordinates are identical for every departure (only their ETAs differ), so one
-Open-Meteo fetch over the union time window serves all departures. Each departure then runs through the
-unchanged `assess_routes()`: same checkpoints, ETAs, sampling, risk, coverage and ranking as the
-single-departure endpoint.
-"""
-
 import hashlib
 import json
 import logging
@@ -37,11 +23,9 @@ logger = logging.getLogger(__name__)
 _HOUR = timedelta(hours=1)
 
 
-# -- planned-route cache --------------------------------------------------------------------------
-
-
 def route_cache_key(origin: Coordinate, destination: Coordinate, provider: RoutingProvider, config: PlannerConfig) -> str:
-    """Everything the planned routes depend on. Deliberately excludes departure, load and checkpoint interval."""
+    # ORS requests don't use departure time, traffic or weight, so those are deliberately left out.
+    # If routing ever starts depending on them, they must be added here.
     payload = {
         "origin": [round(origin.lat, 6), round(origin.lon, 6)],
         "destination": [round(destination.lat, 6), round(destination.lon, 6)],
@@ -66,11 +50,7 @@ def plan_routes_cached(
     cache: BaseCache | None = None,
     ttl: int | None = None,
 ) -> tuple[RoutePlan, bool, int | None]:
-    """Plan routes, reusing a recent identical plan. Returns (plan, cache_hit, routing_http_requests).
-
-    Only successful plans are cached; provider failures propagate and are never stored. A broken cache
-    backend degrades to planning every time rather than failing the request.
-    """
+    """Returns (plan, cache_hit, routing_http_requests)."""
     config = config or PlannerConfig()
     ttl = settings.ROUTE_CACHE_TTL_SECONDS if ttl is None else ttl
     cache = cache if cache is not None else caches["routes"]
@@ -96,16 +76,8 @@ def plan_routes_cached(
     return plan, False, (after - before) if before is not None and after is not None else None
 
 
-# -- shared weather fetch -------------------------------------------------------------------------
-
-
 class PrimedWeatherProvider(WeatherProvider):
-    """Wraps a weather provider so one up-front fetch can serve many `assess_routes` calls.
-
-    `prime()` fetches hourly data for a set of locations over a time window. `fetch_hourly()` then answers
-    from that data when every requested location is primed and the requested window lies inside the primed
-    one; otherwise it delegates to the wrapped provider (so nothing is ever guessed or substituted).
-    """
+    """Serves fetch_hourly from one up-front fetch; falls through to the real provider on any miss."""
 
     def __init__(self, inner: WeatherProvider):
         self._inner = inner
@@ -141,7 +113,7 @@ def _prime_weather(
     interval_miles: float,
     now: datetime,
 ) -> None:
-    """One weather fetch covering every checkpoint of every route across every departure's time span."""
+    # Checkpoint coordinates don't depend on departure, so one fetch over the union window covers all of them.
     window_start, window_end = primed.available_window(now)
     last_servable_hour = window_end - _HOUR
     locations: list[Coordinate] = []
@@ -163,13 +135,10 @@ def _prime_weather(
         primed.prime(locations, lo, hi)
 
 
-# -- the batch ------------------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class DepartureOutcome:
     departure: datetime  # UTC
-    departure_input: str  # as sent by the client
+    departure_input: str
     assessment: TripAssessment | None
     error_code: str | None = None
     error_message: str | None = None
@@ -181,7 +150,7 @@ class BatchResult:
     outcomes: tuple[DepartureOutcome, ...]
     weather_provider_name: str
     route_cache_hit: bool
-    routing_requests: int | None  # HTTP requests to the routing provider made by this call (0 on a cache hit)
+    routing_requests: int | None
     weather_requests: int | None
     generated_at: datetime
 
@@ -202,8 +171,6 @@ def assess_trip_batch(
     route_cache: BaseCache | None = None,
     route_cache_ttl: int | None = None,
 ) -> BatchResult:
-    """Assess the same trip at several departures. Routing and weather failures that affect every departure
-    raise (as in the single endpoint); a failure confined to one departure is reported on that departure only."""
     plan, cache_hit, routing_requests = plan_routes_cached(
         origin, destination, routing_provider, planner_config, cache=route_cache, ttl=route_cache_ttl
     )

@@ -82,7 +82,7 @@ describe('RouteCard', () => {
     expect(screen.queryByText(/★ Recommended/)).not.toBeInTheDocument()
     expect(screen.getByText('Not eligible')).toBeInTheDocument()
     expect(screen.getByText(/only 23% of its miles/)).toBeInTheDocument()
-    expect(screen.getByText('No data')).toBeInTheDocument() // average score is missing, not 0
+    expect(screen.getByText('No data')).toBeInTheDocument()
     expect(screen.getByText('23%')).toBeInTheDocument()
   })
 
@@ -120,7 +120,7 @@ describe('CheckpointTable', () => {
     expect(within(missingRow).getAllByText('No data')).toHaveLength(4)
     expect(within(missingRow).getByText('Unavailable')).toBeInTheDocument()
     expect(within(missingRow).getByText(/beyond the forecast horizon/)).toBeInTheDocument()
-    expect(within(missingRow).getAllByText('Unknown')).toHaveLength(4) // wind, rain, snow and combined are all unknown
+    expect(within(missingRow).getAllByText('Unknown')).toHaveLength(4)
     expect(missingRow.textContent).not.toMatch(/\b0\.0+ (mph|in\/hr)/)
   })
 
@@ -130,7 +130,7 @@ describe('CheckpointTable', () => {
     expect(within(row).getByText(/41\.0/)).toBeInTheDocument()
     expect(within(row).getByText('Partial')).toBeInTheDocument()
     expect(within(row).getByText(/no rain data/)).toBeInTheDocument()
-    expect(within(row).getAllByText('Severe').length).toBeGreaterThanOrEqual(2) // combined + load rule
+    expect(within(row).getAllByText('Severe').length).toBeGreaterThanOrEqual(2)
     expect(within(row).getByText(/Load rule/)).toBeInTheDocument()
   })
 
@@ -141,7 +141,7 @@ describe('CheckpointTable', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: /Only above Low or missing data \(2\)/ }))
     expect(screen.getAllByRole('row')).toHaveLength(3) // header + 2
     await userEvent.click(screen.getByRole('button', { name: 'Locate mile 50 on map' }))
-    expect(onFocus).toHaveBeenCalledWith(2) // mile 50 is checkpoint index 2
+    expect(onFocus).toHaveBeenCalledWith(2)
   })
 
   it('marks which wind value drives the risk', () => {

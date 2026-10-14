@@ -1,12 +1,8 @@
-"""Fake providers shared by pipeline and API tests."""
-
 from routing.providers.base import RoutingProvider
 from routing.tests.factories import make_route, route_via
 
 
 class FakeRoutingProvider(RoutingProvider):
-    """Long-trip behaviour: baseline = straight synthetic line, "shortest" ~ identical, via points honoured."""
-
     name = "fake-routing"
     profile = "driving-hgv"
     alternatives_max_distance_m = 100_000.0

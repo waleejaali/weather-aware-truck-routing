@@ -1,14 +1,3 @@
-"""Open-Meteo adapter (https://open-meteo.com/en/docs). All Open-Meteo knowledge lives here.
-
-Variables (hourly): wind_speed_10m (instant), wind_gusts_10m (max of preceding hour), rain and
-showers (liquid, sum of preceding hour), snowfall (snow depth, sum of preceding hour).
-Requested in mph and inches; with precipitation_unit=inch, snowfall is converted from cm to inch
-(verified against the live API). `precipitation` is NOT used: it includes snow water equivalent.
-
-Free API terms: non-commercial use, CC BY 4.0 attribution (see `attribution`), fewer than 10,000
-calls/day. Data is served for roughly 92 days back to 16 days ahead.
-"""
-
 import math
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
@@ -28,9 +17,9 @@ from ..errors import (
 from ..types import Attribution, HourlyRecord, HourlySeries
 from .base import WeatherProvider
 
+# Not `precipitation`: it includes snow water equivalent, which would double count snowfall.
 HOURLY_VARIABLES = ("wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall")
-# Open-Meteo reports mph as "mp/h". Every response is checked so a silent unit change cannot
-# turn kilometres/hour or centimetres into risk inputs.
+# Open-Meteo labels mph as "mp/h". Checked on every response so a silent unit change can't slip through.
 _EXPECTED_UNITS = {
     "wind_speed_10m": {"mp/h", "mph"},
     "wind_gusts_10m": {"mp/h", "mph"},
@@ -65,7 +54,7 @@ class OpenMeteoProvider(WeatherProvider):
         self._timeout_s = timeout_s
         self._max_locations = max_locations_per_request
         self._session = session or requests.Session()
-        self.request_count = 0  # HTTP requests sent by this instance
+        self.request_count = 0
 
     def available_window(self, now: datetime) -> tuple[datetime, datetime]:
         today = now.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -79,7 +68,6 @@ class OpenMeteoProvider(WeatherProvider):
         start_date = start.astimezone(timezone.utc).date().isoformat()
         end_date = end.astimezone(timezone.utc).date().isoformat()
 
-        # One request per chunk of unique (rounded) locations, not one per checkpoint.
         unique: dict[tuple[float, float], Coordinate] = {}
         for location in locations:
             unique.setdefault(_key(location), location)
@@ -94,16 +82,14 @@ class OpenMeteoProvider(WeatherProvider):
             for location in locations
         ]
 
-    # -- request -----------------------------------------------------------------------------
-
     def _fetch_chunk(self, chunk: Sequence[Coordinate], start_date: str, end_date: str) -> list[HourlySeries]:
         params = {
             "latitude": ",".join(f"{c.lat:.4f}" for c in chunk),
             "longitude": ",".join(f"{c.lon:.4f}" for c in chunk),
             "hourly": ",".join(HOURLY_VARIABLES),
             "wind_speed_unit": "mph",
-            "precipitation_unit": "inch",
-            "timeformat": "unixtime",  # unambiguous UTC epoch seconds
+            "precipitation_unit": "inch",  # also converts snowfall from cm to inches (checked against the live API)
+            "timeformat": "unixtime",
             "timezone": "GMT",
             "start_date": start_date,
             "end_date": end_date,
@@ -129,13 +115,11 @@ class OpenMeteoProvider(WeatherProvider):
         except ValueError as exc:
             raise WeatherResponseError("Open-Meteo returned a non-JSON response") from exc
 
-        # One location returns an object; several return a list.
+        # A single location comes back as an object, several as a list.
         entries = payload if isinstance(payload, list) else [payload]
         if len(entries) != len(chunk):
             raise WeatherResponseError(f"Open-Meteo returned {len(entries)} locations for {len(chunk)} requested")
         return [self._parse_location(location, entry) for location, entry in zip(chunk, entries)]
-
-    # -- response ----------------------------------------------------------------------------
 
     def _parse_location(self, requested: Coordinate, entry: Any) -> HourlySeries:
         try:
@@ -159,7 +143,7 @@ class OpenMeteoProvider(WeatherProvider):
             records[datetime.fromtimestamp(stamp, tz=timezone.utc)] = HourlyRecord(
                 wind_speed_mph=_number(columns["wind_speed_10m"][i]),
                 wind_gust_mph=_number(columns["wind_gusts_10m"][i]),
-                # Liquid precipitation needs both parts; a missing part is not assumed to be zero.
+                # If either rain or showers is missing, don't assume it was zero.
                 rain_in=None if rain is None or showers is None else rain + showers,
                 snow_in=_number(columns["snowfall"][i]),
             )
@@ -174,7 +158,6 @@ def _key(c: Coordinate) -> tuple[float, float]:
 
 
 def _number(value: Any) -> float | None:
-    """A finite number, or None for JSON null. Anything else is a malformed payload."""
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):

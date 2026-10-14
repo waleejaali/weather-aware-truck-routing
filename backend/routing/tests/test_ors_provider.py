@@ -1,5 +1,3 @@
-"""ORS adapter tests with mocked HTTP. No network and no API key needed."""
-
 from unittest import TestCase
 
 import requests
@@ -67,7 +65,7 @@ class OrsSuccessTests(TestCase):
     def test_directions_parses_route_and_swaps_to_lat_lon(self):
         session = FakeSession(FakeResponse(200, collection(feature())))
         route = provider(session).directions([ORIGIN, DESTINATION])
-        self.assertEqual(route.points[0], Coordinate(34.0522, -118.2437))  # (lat, lon)
+        self.assertEqual(route.points[0], Coordinate(34.0522, -118.2437))
         self.assertEqual((route.distance_m, route.duration_s), (25_000.0, 1_800.0))
 
     def test_request_shape_profile_and_key_placement(self):
@@ -79,7 +77,7 @@ class OrsSuccessTests(TestCase):
         self.assertEqual(call["url"], "https://ors.example/v2/directions/driving-hgv/geojson")
         self.assertEqual(call["headers"]["Authorization"], SECRET)
         self.assertNotIn(SECRET, call["url"])
-        self.assertEqual(call["json"]["coordinates"][0], [-118.2437, 34.0522])  # [lon, lat]
+        self.assertEqual(call["json"]["coordinates"][0], [-118.2437, 34.0522])  # ORS wants [lon, lat]
         self.assertEqual(call["json"]["preference"], "shortest")
         self.assertEqual(len(call["json"]["radiuses"]), 3)
         self.assertNotIn("alternative_routes", call["json"])

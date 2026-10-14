@@ -14,7 +14,6 @@ def rec(wind=None, gust=None, rain=None, snow=None):
 
 
 def series(**by_hour):
-    """series(h10=rec(...), h11=rec(...)) keyed by hour of day on 2026-10-14."""
     records = {datetime(2026, 10, 14, int(k[1:]), tzinfo=UTC): v for k, v in by_hour.items()}
     return HourlySeries(Coordinate(34, -118), records)
 
@@ -42,7 +41,7 @@ class SamplingTests(TestCase):
             h11=rec(rain=0.2, snow=0.6, gust=33.0),
         )
         c = sample_conditions(s, datetime(2026, 10, 14, 10, 15, tzinfo=UTC))
-        # 10:15 lies inside the hour ending 11:00, not the one ending 10:00.
+        # precip/gust values cover the preceding hour, so 10:15 belongs to the 11:00 record
         self.assertEqual((c.rain_in_hr, c.snow_in_hr, c.gust_mph), (0.2, 0.6, 33.0))
 
     def test_arrival_exactly_on_the_hour_uses_that_hours_record(self):
@@ -52,7 +51,7 @@ class SamplingTests(TestCase):
         self.assertEqual(c.missing, ())
 
     def test_missing_record_is_reported_never_substituted(self):
-        s = series(h10=rec(wind=20.0, gust=20.0, rain=0.0, snow=0.0))  # nothing for 11:00
+        s = series(h10=rec(wind=20.0, gust=20.0, rain=0.0, snow=0.0))
         c = sample_conditions(s, datetime(2026, 10, 14, 10, 30, tzinfo=UTC))
         self.assertIsNone(c.wind_mph)
         self.assertEqual(c.missing, ("wind", "gust", "rain", "snow"))

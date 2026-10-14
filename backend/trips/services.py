@@ -1,5 +1,3 @@
-"""The routing + weather + risk pipeline as one callable, shared by the API and management commands."""
-
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -31,10 +29,6 @@ def assess_trip(
     wind_metric: str = "sustained",
     planner_config: PlannerConfig | None = None,
 ) -> TripResult:
-    """Plan up to three routes, then assess weather risk along each and rank them.
-
-    Raises routing.errors.RoutingError or weather.errors.WeatherProviderError on provider failure.
-    """
     plan = RoutePlanner(routing_provider, planner_config).plan(origin, destination)
     assessment = assess_routes(
         plan.routes,
